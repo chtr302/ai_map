@@ -1,0 +1,21 @@
+# General
+.DS_Store
+.vscode/
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+local.properties
+.gradle/
+build/
+captures/
+*.apk
+*.ap_
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+*.env
