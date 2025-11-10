@@ -1,12 +1,17 @@
-package com.example.aimap;
+package com.example.aimap.ui;
 
 import android.os.Bundle;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ImageView;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.example.aimap.data.ChatMessage;
+import com.example.aimap.R;
+import com.example.aimap.ui.adapter.ChatAdapter;
+
 import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity {

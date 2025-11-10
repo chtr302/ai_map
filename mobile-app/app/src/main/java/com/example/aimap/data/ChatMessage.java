@@ -1,4 +1,4 @@
-package com.example.aimap;
+package com.example.aimap.data;
 
 public class ChatMessage {
     public static final int TYPE_USER = 0;
