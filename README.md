@@ -1,43 +1,44 @@
-# Dự án AI Map (Android & AI Microservice)
+# AI Map
 
-Dự án này xây dựng một ứng dụng di động Android cho phép người dùng sử dụng ngôn ngữ tự nhiên để tương tác với AI đưa ra các câu hỏi liên quan đến Map
+AI Map là một dự án ứng dụng di động Android thử nghiệm, cho phép người dùng tìm kiếm các địa điểm xung quanh bằng cách sử dụng các câu hỏi bằng ngôn ngữ tự nhiên, thay vì các từ khóa cứng nhắc.
 
-## Cấu trúc dự án (Monorepo)
+Ví dụ: *"Tìm giúp tôi những quán cơm tấm ngon, rẻ ở gần đây."* hoặc *"Có sân bóng nào gần đây có đánh giá tốt không?"*
 
-Dự án được quản lý dưới dạng monorepo, chứa cả code của ứng dụng di động và dịch vụ AI trong cùng một repository.
+## Tính năng chính
 
-```
-/
-├── mobile-app/
-│   └── (Mã nguồn dự án Android Studio)
-│
-├── ai-service/
-│   ├── app/
-│   │   ├── api/
-│   │   ├── core/
-│   │   ├── models/
-│   │   └── services/
-│   ├── main.py
-│   └── requirements.txt
-│
-├── .gitignore
-└── README.md
-```
+- **Tìm kiếm bằng ngôn ngữ tự nhiên:** Thay vì tìm kiếm theo từ khóa, người dùng có thể đặt câu hỏi như đang giao tiếp với một người trợ lý.
+- **Phân tích và hiểu câu hỏi:** Một model AI chuyên dụng sẽ phân tích câu hỏi để xác định các yếu tố quan trọng như:
+    - Loại địa điểm (quán ăn, quán cà phê, sân bóng...).
+    - Các tiêu chí (ngon, rẻ, có đánh giá tốt, gần đây...).
+    - Yêu cầu sắp xếp hoặc lọc.
+- **Tích hợp Google Maps:** Sử dụng Google Maps Platform API làm nguồn dữ liệu chính để đảm bảo thông tin địa điểm chính xác và cập nhật.
+- **Tổng hợp thông minh:** AI không chỉ trả về một danh sách thô, mà sẽ tổng hợp và định dạng lại thông tin thành một câu trả lời tự nhiên, dễ hiểu.
 
-## Các thành phần
+## Kiến trúc & Luồng hoạt động
 
-### 1. Ứng dụng di động (`mobile-app`)
+Dự án được xây dựng theo kiến trúc client-server, bao gồm hai thành phần chính:
 
-- **Nền tảng:** Android (Java/Kotlin)
-- **Mô tả:** Là giao diện chính để người dùng tương tác, nhập câu hỏi tìm kiếm và nhận kết quả trả về từ AI.
-- **Chi tiết:** Xem thêm trong `mobile-app/README.md` (sẽ được tạo sau).
+1.  **Mobile App (Client):** Giao diện người dùng trên nền tảng Android, nơi người dùng nhập câu hỏi và nhận kết quả trả về.
+2.  **AI Service (Backend):** Dịch vụ backend viết bằng Python, chịu trách nhiệm xử lý logic AI.
 
-### 2. Dịch vụ AI (`ai-service`)
+**Luồng hoạt động cơ bản:**
 
-- **Nền tảng:** Python
-- **Mô tả:** Microservice backend có nhiệm vụ nhận yêu cầu từ ứng dụng di động, phân tích câu hỏi bằng Gemini, truy vấn Google Maps API, và trả về câu trả lời đã được tổng hợp thông minh.
-- **Chi tiết:** Xem thêm trong `ai-service/README.md`.
+1.  Người dùng nhập câu hỏi tìm kiếm trên ứng dụng Android.
+2.  Ứng dụng gửi câu hỏi đến **AI Service**.
+3.  Tại backend, **model AI** sẽ phân tích câu hỏi.
+4.  Dựa trên phân tích, model AI sử dụng **Model Context Protocol (MCP)** để tạo và thực thi các truy vấn tới **Google Maps API**.
+5.  Sau khi nhận dữ liệu từ Google Maps, **model AI** tiếp tục xử lý, tổng hợp và định dạng lại thành một câu trả lời tự nhiên.
+6.  Kết quả cuối cùng được gửi trở lại ứng dụng Android và hiển thị cho người dùng.
 
-## Bắt đầu
+## Công nghệ sử dụng
 
-Để bắt đầu phát triển, bạn cần cài đặt môi trường cho cả hai thành phần. Vui lòng tham khảo hướng dẫn chi tiết trong file `README.md` của từng thư mục con.
+- **Backend:** Python
+- **Mobile App:** Android (Java/Kotlin)
+- **Xử lý ngôn ngữ:** Model AI chuyên dụng
+- **Nguồn dữ liệu:** Google Maps Platform API
+- **Giao thức tương tác:** Model Context Protocol (MCP)
+
+## Cấu trúc thư mục
+
+- `/mobile-app`: Chứa toàn bộ mã nguồn của ứng dụng Android.
+- `/ai-service`: Chứa mã nguồn của dịch vụ AI backend.

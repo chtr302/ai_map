@@ -21,3 +21,7 @@ env/
 *.env
 .DS_Store
 GEMINI.md
+
+# AI Service
+ai-service/pyproject.toml
+ai-service/uv.lock
