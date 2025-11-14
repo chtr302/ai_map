@@ -1,5 +1,11 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/surfaceInput"/>
-    <corners android:radius="18dp"/>
-    <stroke android:width="1dp" android:color="@color/textGray"/>
+    <solid android:color="@color/aiBubbleBackground"/>
+    <corners
+        android:bottomLeftRadius="4dp"
+        android:bottomRightRadius="20dp"
+        android:topLeftRadius="20dp"
+        android:topRightRadius="20dp" />
+    <stroke
+        android:width="1dp"
+        android:color="#5A5A5C" />
 </shape>
