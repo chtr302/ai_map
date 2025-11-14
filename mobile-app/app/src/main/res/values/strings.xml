@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">AI Map</string>
+    <string-array name="suggestion_questions">
+        <item>Quán cà phê nào gần đây có view đẹp?</item>
+        <item>Tìm giúp tôi một cây xăng gần đây</item>
+        <item>Có nhà hàng nào giá rẻ quanh đây không?</item>
+        <item>Gợi ý một vài địa điểm ăn sáng ngon.</item>
+        <item>Tìm các công viên hoặc không gian xanh gần đây.</item>
+        <item>Hiệu thuốc nào đang mở cửa gần tôi?</item>
+        <item>ATM của ngân hàng Vietcombank ở đâu gần nhất?</item>
+        <item>Tìm các địa điểm vui chơi cho trẻ em.</item>
+        <item>Gợi ý quán ăn trưa văn phòng.</item>
+        <item>Siêu thị hoặc cửa hàng tiện lợi nào gần đây?</item>
+    </string-array>
 </resources>
