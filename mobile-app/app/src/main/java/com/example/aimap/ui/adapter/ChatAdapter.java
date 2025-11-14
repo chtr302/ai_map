@@ -52,6 +52,20 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return messages.size();
     }
 
+    public void addMessage(ChatMessage message){
+        messages.add(message);
+        notifyItemInserted(messages.size() - 1);
+    }
+    public void clearMessages() {
+        int size = messages.size();
+        messages.clear();
+        notifyItemRangeRemoved(0, size);
+    }
+    public void updateMessages(ArrayList<ChatMessage> newMessages) {
+        clearMessages();
+        messages.addAll(newMessages);
+        notifyDataSetChanged();
+    }
     static class UserViewHolder extends RecyclerView.ViewHolder {
         TextView tvMessage;
         UserViewHolder(View itemView) {
