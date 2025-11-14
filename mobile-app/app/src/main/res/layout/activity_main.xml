@@ -1,92 +1,135 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
-    android:background="@color/colorAccent"
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Nội dung chính của activity -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="72dp"
-        android:orientation="horizontal"
-        android:padding="16dp"
-        android:background="@color/colorPrimary"
-        android:gravity="center_vertical"
-        android:elevation="2dp"
-        android:clipToPadding="false"
-        android:layout_marginBottom="4dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@color/cardBackground">
 
-        <ImageButton
-            android:id="@+id/buttonMenu"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="@android:color/transparent"
-            android:src="@drawable/ic_menu"
-            android:contentDescription="Menu" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginBottom="4dp"
+            android:background="#1C1C1E"
+            android:clipToPadding="false"
+            android:elevation="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <ImageButton
+                android:id="@+id/buttonMenu"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="Menu"
+                android:src="@drawable/ic_menu" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:letterSpacing="0.03"
+                android:text="Loco AI"
+                android:textColor="@color/colorAccent"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:id="@+id/imageAvatar"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_avatar_circle"
+                android:clickable="true"
+                android:contentDescription="Ảnh đại diện"
+                android:focusable="true"
+                android:padding="6dp"
+                android:src="@drawable/ic_avatar" />
+        </LinearLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewChat"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:padding="10dp"
+            android:clipToPadding="false"
+            android:background="@drawable/bg_input"
+            android:overScrollMode="never" />
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/surfaceInput"
+            android:padding="8dp"
+            android:gravity="center_vertical"
+            android:elevation="4dp"
+            android:layout_margin="5dp">
+
+            <EditText
+                android:id="@+id/editTextMessage"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="48dp"
+                android:hint="Nhập nơi bạn muốn tìm..."
+                android:textColor="@color/colorAccent"
+                android:textSize="16sp"
+                android:background="@drawable/bg_edittext"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp" />
+
+            <ImageButton
+                android:id="@+id/buttonSend"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:backgroundTint="@color/colorPrimary"
+                android:background="@drawable/bg_btn_send"
+                android:src="@drawable/ic_send"
+                android:contentDescription="Gửi"/>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Navigation drawer (danh sách session) -->
+    <LinearLayout
+        android:layout_width="300dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:orientation="vertical"
+        android:background="@color/colorPrimary"
+        android:padding="16dp">
 
         <TextView
-            android:text="AI-MAP"
-            android:textColor="@color/colorAccent"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:letterSpacing="0.03" />
-
-        <ImageView
-            android:id="@+id/imageAvatar"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:src="@drawable/ic_avatar"
-            android:background="@drawable/bg_avatar_circle"
-            android:padding="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:contentDescription="Ảnh đại diện" />
-    </LinearLayout>
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewChat"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:padding="10dp"
-        android:clipToPadding="false"
-        android:background="@drawable/bg_recycler"
-        android:overScrollMode="never" />
-
-    <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/surfaceInput"
-        android:padding="8dp"
-        android:gravity="center_vertical"
-        android:elevation="4dp"
-        android:layout_margin="5dp">
-
-        <EditText
-            android:id="@+id/editTextMessage"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="48dp"
-            android:hint="Nhập nơi bạn muốn tìm..."
-            android:textColor="@color/textGreen"
-            android:textSize="16sp"
-            android:background="@drawable/bg_edittext"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp" />
+            android:text="Các cuộc trò chuyện"
+            android:textColor="@color/colorAccent"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
 
         <ImageButton
-            android:id="@+id/buttonSend"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:backgroundTint="@color/colorPrimary"
-            android:background="@drawable/bg_btn_send"
-            android:src="@drawable/ic_send"
-            android:contentDescription="Gửi"/>
+            android:id="@+id/buttonNewSession"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginBottom="16dp"
+            android:background="@color/cardBackground"
+            android:src="@android:drawable/ic_input_add"
+            android:contentDescription="Tạo mới" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewDrawerSessions"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
     </LinearLayout>
-</LinearLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>
