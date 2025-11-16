@@ -3,7 +3,6 @@ package com.example.aimap.network;
 import androidx.annotation.NonNull;
 
 import com.example.aimap.data.ChatMessage;
-import com.example.aimap.data.repository.SessionManager;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -32,11 +31,9 @@ public class ApiManager {
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     private OkHttpClient client;
-    private SessionManager sessionManager;
     private boolean inThinkBlock = false;
 
-    public ApiManager(SessionManager sessionManager) {
-        this.sessionManager = sessionManager;
+    public ApiManager() {
         this.client = new OkHttpClient.Builder()
                 .connectTimeout(60, TimeUnit.SECONDS)
                 .readTimeout(60, TimeUnit.SECONDS)
@@ -68,8 +65,6 @@ public class ApiManager {
         this.inThinkBlock = false;
         new Thread(() -> {
             try {
-                List<ChatMessage> history = sessionManager.getMessagesBySessionWithLimit(currentSessionId, 20, 0);
-                
                 Map<String, Object> requestBody = new HashMap<>();
                 requestBody.put("model", "qwen3:8b");
                 requestBody.put("temperature", 0.7);
@@ -79,13 +74,6 @@ public class ApiManager {
                 systemMessage.put("role", "system");
                 systemMessage.put("content", systemPrompt + " /no_think"); // Đây là system prompt không public được, nên ai cần thì liên hệ nhé
                 messages.add(systemMessage);
-
-                for (ChatMessage message : history) {
-                    Map<String, String> msg = new HashMap<>();
-                    msg.put("role", message.getType() == ChatMessage.TYPE_USER ? "user" : "assistant");
-                    msg.put("content", message.getMessage());
-                    messages.add(msg);
-                }
 
                 Map<String, String> userMessage = new HashMap<>();
                 userMessage.put("role", "user");

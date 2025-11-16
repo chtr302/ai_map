@@ -6,16 +6,7 @@ import androidx.room.ForeignKey;
 import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
-@Entity(
-        tableName = "chat_messages",
-        foreignKeys = @ForeignKey(
-            entity = Session.class,
-            parentColumns = "session_id",
-            childColumns = "session_id",
-            onDelete = ForeignKey.CASCADE
-        ),
-        indices = {@Index(value = "session_id")}
-)
+@Entity(tableName = "chat_messages")
 
 public class ChatMessage {
     public static final int TYPE_USER = 0;
