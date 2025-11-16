@@ -1,25 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#1C1C1E</color>
-
-    <color name="colorAccent">#FFFFFF</color>
-
-    <color name="surfaceInput">#1C1C1E</color>
-    <color name="cardBackground">#2C2C2E</color>
-
-    <color name="aiBubbleBackground">#4A4A4C</color>
-
+    <color name="colorPrimary">#2E8B57</color>
+    <color name="colorAccent">#FFFFFF</color> <!-- Text on dark backgrounds (toolbar, input) -->
+    <color name="surfaceInput">#000000</color> <!-- Input background -->
+    <color name="cardBackground">#F5F5F5</color>
+    <color name="aiBubbleBackground">#E0E0E0</color>
     <color name="userBubbleBackground">#2E8B57</color>
-
-    <color name="textSecondary">#8E8E93</color>
-
-    <!-- Màu cho chữ "Xin chào" -->
-    <color name="textBlueGlow">#FFFFFF</color>
-
+    <color name="textSecondary">#8A8A8A</color>
+    <color name="textBlueGlow">#FFFFFF</color> <!-- Empty chat text -->
     <color name="iconColor">#FFFFFF</color>
     <color name="textGreen">#34C759</color>
     <color name="textGray">#8E8E93</color>
-
+    <color name="chatMessageTextColor">#000000</color> <!-- Text inside chat bubbles -->
 </resources>
 
 

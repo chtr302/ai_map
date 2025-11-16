@@ -25,10 +25,8 @@ import com.example.aimap.R;
 import com.example.aimap.data.AppDatabase;
 import com.example.aimap.data.ChatMessage;
 import com.example.aimap.data.SystemPrompts;
-import com.example.aimap.data.repository.SessionManager;
 import com.example.aimap.network.ApiManager;
 import com.example.aimap.ui.adapter.ChatAdapter;
-import com.example.aimap.ui.adapter.SessionAdapter;
 import com.example.aimap.ui.adapter.SuggestionAdapter;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
@@ -50,11 +48,9 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerViewDrawerSessions;
     private RecyclerView recyclerViewSuggestions;
     private ChatAdapter chatAdapter;
-    private SessionAdapter drawerSessionAdapter;
     private SuggestionAdapter suggestionAdapter;
     private ArrayList<ChatMessage> chatList;
     private String currentSessionId;
-    private SessionManager sessionManager;
     private ApiManager apiManager;
 
     // Location
@@ -82,25 +78,19 @@ public class MainActivity extends AppCompatActivity {
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this); // Lấy vị trí
 
-        // Khởi tạo database với session manager
+        // Khởi tạo database
         AppDatabase database = AppDatabase.getDatabase(this);
-        sessionManager = new SessionManager(
-                database.sessionDao(),
-                database.chatMessageDao()
-        );
-        apiManager = new ApiManager(sessionManager);
+        apiManager = new ApiManager(); // apiManager không còn phụ thuộc vào sessionManager
 
-        drawerLayout = findViewById(R.id.drawerLayout);
+        drawerLayout = findViewById(R.id.drawerLayout); // Giữ lại drawerLayout
         editTextMessage = findViewById(R.id.editTextMessage);
         recyclerViewChat = findViewById(R.id.recyclerViewChat);
-        recyclerViewDrawerSessions = findViewById(R.id.recyclerViewDrawerSessions);
         recyclerViewSuggestions = findViewById(R.id.recyclerViewSuggestions);
         ImageButton buttonSend = findViewById(R.id.buttonSend);
-        buttonNewSession = findViewById(R.id.buttonNewSession);
-        buttonMenu = findViewById(R.id.buttonMenu);
         textViewEmptyChat = findViewById(R.id.textViewEmptyChat);
 
-        buttonMenu.setOnClickListener(v -> drawerLayout.open());
+        // Khởi tạo currentSessionId với một UUID mới
+        String currentSessionId = java.util.UUID.randomUUID().toString();
 
         // adapter cho danh sách chat
         chatList = new ArrayList<>();
@@ -108,83 +98,40 @@ public class MainActivity extends AppCompatActivity {
         LinearLayoutManager chatLayoutManager = new LinearLayoutManager(this);
         chatLayoutManager.setStackFromEnd(true);
         recyclerViewChat.setLayoutManager(chatLayoutManager);
-        recyclerViewChat.setAdapter(chatAdapter);
-
-        drawerSessionAdapter = new SessionAdapter(
-            session -> {
-                switchToSession(session.session_id);
-                drawerLayout.closeDrawers();
-            },
-            new SessionAdapter.OnSessionActionListener() {
-                @Override
-                public void onDeleteSession(com.example.aimap.data.Session session) {
-                    executor.execute(() -> {
-                        sessionManager.deleteSession(session.session_id);
-                        mainHandler.post(() -> {
-                            loadSessionsForDrawer();
-                            if (session.session_id.equals(currentSessionId)) {
-                                executor.execute(() -> {
-                                    String newSessionId = sessionManager.createNewSession("Cuộc trò chuyện mới");
-                                    mainHandler.post(() -> switchToSession(newSessionId));
-                                });
+                recyclerViewChat.setAdapter(chatAdapter);
+        
+                // adapter cho gợi ý
+                suggestionAdapter = new SuggestionAdapter(suggestion -> {
+                    editTextMessage.setText(suggestion);
+                    buttonSend.performClick();
+                });
+                recyclerViewSuggestions.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                recyclerViewSuggestions.setAdapter(suggestionAdapter);
+        
+                        requestPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                            if (isGranted) {
+                                fetchLocationForContext();
+                            } else {
+                                Toast.makeText(this, "Không có quyền truy cập vị trí, một số câu hỏi sẽ không hoạt động.", Toast.LENGTH_LONG).show();
                             }
                         });
-                    });
-                }
-
-                @Override
-                public void onRenameSession(com.example.aimap.data.Session session) {
-                    showRenameSessionDialog(session);
-                }
-
-                @Override
-                public void onDuplicateSession(com.example.aimap.data.Session session) {
-                    executor.execute(() -> {
-                        String newSessionId = sessionManager.createNewSession(session.title + " (Sao chép)");
-                        List<com.example.aimap.data.ChatMessage> originalMessages = sessionManager.getMessagesBySession(session.session_id);
-                        for (com.example.aimap.data.ChatMessage message : originalMessages) {
-                            sessionManager.addMessageToSession(newSessionId, message.getMessage(), message.getType());
-                        }
-                        mainHandler.post(MainActivity.this::loadSessionsForDrawer);
-                    });
-                }
-            }
-        );
-        recyclerViewDrawerSessions.setLayoutManager(new LinearLayoutManager(this));
-        recyclerViewDrawerSessions.setAdapter(drawerSessionAdapter);
-
-        // adapter cho gợi ý
-        suggestionAdapter = new SuggestionAdapter(suggestion -> {
-            editTextMessage.setText(suggestion);
-            buttonSend.performClick();
-        });
-        recyclerViewSuggestions.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-        recyclerViewSuggestions.setAdapter(suggestionAdapter);
-
-        requestPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-            if (isGranted) {
-                fetchLocationForContext();
-            } else {
-                Toast.makeText(this, "Không có quyền truy cập vị trí, một số câu hỏi sẽ không hoạt động.", Toast.LENGTH_LONG).show();
-            }
-        });
-
-        loadInitialSession();
-        requestLocationPermission();
-
-        buttonNewSession.setOnClickListener(v -> {
-            executor.execute(() -> {
-                String newSessionId = sessionManager.createNewSession("Cuộc trò chuyện mới");
                 
-                mainHandler.post(() -> {
-                    switchToSession(newSessionId);
-                    drawerLayout.closeDrawers();
-                });
-            });
-        });
-
-        buttonSend.setOnClickListener(v -> {
-            String msg = editTextMessage.getText().toString().trim();
+                        requestLocationPermission();
+                
+                        // Add a welcome message
+                        ChatMessage welcomeMessage = new ChatMessage(
+                            java.util.UUID.randomUUID().toString(),
+                            currentSessionId,
+                            "Xin chào! Tôi là Loco AI, một trợ lý ảo được Hậu xây dựng để chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi một vài câu hỏi nhé.",
+                            ChatMessage.TYPE_AI,
+                            System.currentTimeMillis()
+                        );
+                        addMessageToUI(welcomeMessage);
+                
+                        generateRandomSuggestions();
+                        updateEmptyStateUi();
+                
+                        buttonSend.setOnClickListener(v -> {            String msg = editTextMessage.getText().toString().trim();
             if (msg.isEmpty()) {
                 return;
             }
@@ -208,7 +155,6 @@ public class MainActivity extends AppCompatActivity {
                     System.currentTimeMillis()
             );
             addMessageToUI(userMessage);
-            saveMessageToDB(userMessage);
 
             // Tạo system prompt động
             String dynamicSystemPrompt = SystemPrompts.DEFAULT_MAP_PROMPT; // Có thể tạo 1 file để tạo System Prompt
@@ -263,44 +209,13 @@ aiMessage.message = streamingResponse.toString();
                                 chatAdapter.notifyItemChanged(chatList.size() - 1);
                             });
                         }
-                        saveMessageToDB(aiMessage);
                     }
                 });
             });
         });
     }
 
-    private void loadInitialSession() {
-        String passedSessionId = getIntent().getStringExtra("SESSION_ID");
-        executor.execute(() -> {
-            String sessionIdToLoad;
-            List<com.example.aimap.data.Session> activeSessions = sessionManager.getAllActiveSessions();
 
-            if (passedSessionId != null && !passedSessionId.isEmpty()) {
-                sessionIdToLoad = passedSessionId;
-            } else if (!activeSessions.isEmpty()) {
-                sessionIdToLoad = activeSessions.get(0).session_id;
-            } else {
-                sessionIdToLoad = sessionManager.createNewSession("Cuộc trò chuyện mới");
-                mainHandler.post(() -> {
-                    ChatMessage welcomeMessage = new ChatMessage(
-                        java.util.UUID.randomUUID().toString(),
-                        sessionIdToLoad,
-                        "Xin chào! Tôi là Loco AI, một trợ lý ảo được Hậu xây dựng để chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi một vài câu hỏi nhé.",
-                        ChatMessage.TYPE_AI,
-                        System.currentTimeMillis()
-                    );
-                    addMessageToUI(welcomeMessage);
-                    saveMessageToDB(welcomeMessage);
-                });
-            }
-
-            mainHandler.post(() -> {
-                switchToSession(sessionIdToLoad);
-                loadSessionsForDrawer();
-            });
-        });
-    }
 
     private void requestLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -338,35 +253,9 @@ aiMessage.message = streamingResponse.toString();
         });
     }
 
-    private void switchToSession(String sessionId) {
-        currentSessionId = sessionId;
-        
-        executor.execute(() -> {
-            List<com.example.aimap.data.ChatMessage> messages = sessionManager.getMessagesBySession(currentSessionId);
-            
-            mainHandler.post(() -> {
-                chatList.clear();
-                chatList.addAll(messages);
-                chatAdapter.notifyDataSetChanged();
-                
-                if (!chatList.isEmpty()) {
-                    recyclerViewChat.scrollToPosition(chatList.size() - 1);
-                }
-                generateRandomSuggestions();
-                updateEmptyStateUi();
-            });
-        });
-    }
 
-    private void loadSessionsForDrawer() {
-        executor.execute(() -> {
-            List<com.example.aimap.data.Session> sessions = sessionManager.getAllActiveSessions();
-            
-            mainHandler.post(() -> {
-                drawerSessionAdapter.updateSessions(sessions);
-            });
-        });
-    }
+
+
 
     private void addMessageToUI(ChatMessage chatMessage) {
         chatList.add(chatMessage);
@@ -375,38 +264,9 @@ aiMessage.message = streamingResponse.toString();
         updateEmptyStateUi();
     }
 
-    private void saveMessageToDB(ChatMessage chatMessage) {
-        executor.execute(() -> {
-            sessionManager.addMessageToSession(
-                chatMessage.getSession_id(),
-                chatMessage.getMessage(),
-                chatMessage.getType()
-            );
-        });
-    }
 
-    private void showRenameSessionDialog(com.example.aimap.data.Session session) {
-        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
-        builder.setTitle("Đổi tên cuộc trò chuyện");
 
-        final android.widget.EditText input = new android.widget.EditText(this);
-        input.setText(session.title);
-        builder.setView(input);
 
-        builder.setPositiveButton("OK", (dialog, which) -> {
-            String newName = input.getText().toString().trim();
-            if (!newName.isEmpty()) {
-                executor.execute(() -> {
-                    sessionManager.updateSessionTitle(session.session_id, newName);
-                    
-                    mainHandler.post(this::loadSessionsForDrawer);
-                });
-            }
-        });
-        builder.setNegativeButton("Hủy", (dialog, which) -> dialog.cancel());
-
-        builder.show();
-    }
 
     private void updateEmptyStateUi() {
         if (chatList.isEmpty()) {

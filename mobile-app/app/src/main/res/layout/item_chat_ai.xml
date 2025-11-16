@@ -27,7 +27,8 @@
 
     <TextView
         android:id="@+id/tvMessage"
-        android:textColor="@color/colorAccent"
+        android:background="@drawable/chat_bubble_left"
+        android:textColor="@color/chatMessageTextColor"
         android:textSize="16sp"
         android:padding="12dp"
         android:maxWidth="280dp"
