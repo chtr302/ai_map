@@ -42,7 +42,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
-    private static final String TAG = "MainActivity"; // Tag for logging
+    private static final String TAG = "MainActivity";
     private EditText editTextMessage;
     private RecyclerView recyclerViewChat;
     private RecyclerView recyclerViewDrawerSessions;
@@ -53,18 +53,19 @@ public class MainActivity extends AppCompatActivity {
     private String currentSessionId;
     private ApiManager apiManager;
 
-    // Location
+    // location
     private FusedLocationProviderClient fusedLocationClient;
     private ActivityResultLauncher<String> requestPermissionLauncher;
     private android.location.Location lastKnownLocation;
 
-    // Drawer
+    // Drawer + nút
     private DrawerLayout drawerLayout;
+    private MaterialButton btnShowDetail;
     private MaterialButton buttonNewSession;
     private ImageButton buttonMenu;
     private TextView textViewEmptyChat;
 
-    // Executor cho background tasks
+    // background
     private ExecutorService executor;
     private Handler mainHandler;
 
@@ -73,65 +74,72 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        executor = Executors.newSingleThreadExecutor(); // Để chạy thread ngầm
+        executor = Executors.newSingleThreadExecutor();
         mainHandler = new Handler(Looper.getMainLooper());
 
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this); // Lấy vị trí
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
-        // Khởi tạo database
         AppDatabase database = AppDatabase.getDatabase(this);
-        apiManager = new ApiManager(); // apiManager không còn phụ thuộc vào sessionManager
+        apiManager = new ApiManager();
 
-        drawerLayout = findViewById(R.id.drawerLayout); // Giữ lại drawerLayout
+        drawerLayout = findViewById(R.id.drawerLayout);
         editTextMessage = findViewById(R.id.editTextMessage);
         recyclerViewChat = findViewById(R.id.recyclerViewChat);
         recyclerViewSuggestions = findViewById(R.id.recyclerViewSuggestions);
+        btnShowDetail = findViewById(R.id.btnShowDetail);
         ImageButton buttonSend = findViewById(R.id.buttonSend);
         textViewEmptyChat = findViewById(R.id.textViewEmptyChat);
 
-        // Khởi tạo currentSessionId với một UUID mới
-        String currentSessionId = java.util.UUID.randomUUID().toString();
+        currentSessionId = java.util.UUID.randomUUID().toString();
 
-        // adapter cho danh sách chat
         chatList = new ArrayList<>();
         chatAdapter = new ChatAdapter(chatList);
         LinearLayoutManager chatLayoutManager = new LinearLayoutManager(this);
         chatLayoutManager.setStackFromEnd(true);
         recyclerViewChat.setLayoutManager(chatLayoutManager);
-                recyclerViewChat.setAdapter(chatAdapter);
-        
-                // adapter cho gợi ý
-                suggestionAdapter = new SuggestionAdapter(suggestion -> {
-                    editTextMessage.setText(suggestion);
-                    buttonSend.performClick();
-                });
-                recyclerViewSuggestions.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-                recyclerViewSuggestions.setAdapter(suggestionAdapter);
-        
-                        requestPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-                            if (isGranted) {
-                                fetchLocationForContext();
-                            } else {
-                                Toast.makeText(this, "Không có quyền truy cập vị trí, một số câu hỏi sẽ không hoạt động.", Toast.LENGTH_LONG).show();
-                            }
-                        });
-                
-                        requestLocationPermission();
-                
-                        // Add a welcome message
-                        ChatMessage welcomeMessage = new ChatMessage(
-                            java.util.UUID.randomUUID().toString(),
-                            currentSessionId,
-                            "Xin chào! Tôi là Loco AI, một trợ lý ảo được Hậu xây dựng để chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi một vài câu hỏi nhé.",
-                            ChatMessage.TYPE_AI,
-                            System.currentTimeMillis()
-                        );
-                        addMessageToUI(welcomeMessage);
-                
-                        generateRandomSuggestions();
-                        updateEmptyStateUi();
-                
-                        buttonSend.setOnClickListener(v -> {            String msg = editTextMessage.getText().toString().trim();
+        recyclerViewChat.setAdapter(chatAdapter);
+
+        suggestionAdapter = new SuggestionAdapter(suggestion -> {
+            editTextMessage.setText(suggestion);
+            buttonSend.performClick();
+        });
+        recyclerViewSuggestions.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        recyclerViewSuggestions.setAdapter(suggestionAdapter);
+
+        // nút xem chi tiết điểm
+        btnShowDetail.setOnClickListener(v -> {
+            double userLat = lastKnownLocation != null ? lastKnownLocation.getLatitude() : 10.77;
+            double userLng = lastKnownLocation != null ? lastKnownLocation.getLongitude() : 106.69;
+            findViewById(R.id.fragmentContainer).setVisibility(View.VISIBLE);
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.fragmentContainer, SuggestedPlacesFragment.newInstance(userLat, userLng))
+                    .addToBackStack(null)
+                    .commit();
+        });
+
+        requestPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+            if (isGranted) {
+                fetchLocationForContext();
+            } else {
+                Toast.makeText(this, "Không có quyền truy cập vị trí, một số câu hỏi sẽ không hoạt động.", Toast.LENGTH_LONG).show();
+            }
+        });
+        requestLocationPermission();
+
+        ChatMessage welcomeMessage = new ChatMessage(
+                java.util.UUID.randomUUID().toString(),
+                currentSessionId,
+                "Xin chào! Tôi là Loco AI, một trợ lý ảo được Hậu xây dựng để chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi một vài câu hỏi nhé.",
+                ChatMessage.TYPE_AI,
+                System.currentTimeMillis()
+        );
+        addMessageToUI(welcomeMessage);
+
+        generateRandomSuggestions();
+        updateEmptyStateUi();
+
+        buttonSend.setOnClickListener(v -> {
+            String msg = editTextMessage.getText().toString().trim();
             if (msg.isEmpty()) {
                 return;
             }
@@ -156,14 +164,13 @@ public class MainActivity extends AppCompatActivity {
             );
             addMessageToUI(userMessage);
 
-            // Tạo system prompt động
-            String dynamicSystemPrompt = SystemPrompts.DEFAULT_MAP_PROMPT; // Có thể tạo 1 file để tạo System Prompt
+            String dynamicSystemPrompt = SystemPrompts.DEFAULT_MAP_PROMPT;
             if (lastKnownLocation != null) {
                 dynamicSystemPrompt += String.format(
-                    Locale.US,
-                    "\n# BỐI CẢNH VỊ TRÍ\nVị trí hiện tại của người dùng là (latitude: %f, longitude: %f). Hãy sử dụng thông tin này nếu câu hỏi của họ có liên quan đến 'ở đây', 'gần đây', 'xung quanh đây'.",
-                    lastKnownLocation.getLatitude(),
-                    lastKnownLocation.getLongitude()
+                        Locale.US,
+                        "\n# BỐI CẢNH VỊ TRÍ\nVị trí hiện tại của người dùng là (latitude: %f, longitude: %f). Hãy sử dụng thông tin này nếu câu hỏi của họ có liên quan đến 'ở đây', 'gần đây', 'xung quanh đây'.",
+                        lastKnownLocation.getLatitude(),
+                        lastKnownLocation.getLongitude()
                 );
             }
 
@@ -189,7 +196,7 @@ public class MainActivity extends AppCompatActivity {
                             firstChunk = false;
                         }
                         streamingResponse.append(partialResult);
-aiMessage.message = streamingResponse.toString();
+                        aiMessage.message = streamingResponse.toString();
                         mainHandler.post(() -> {
                             chatAdapter.notifyItemChanged(chatList.size() - 1);
                             recyclerViewChat.post(() -> {
@@ -215,8 +222,6 @@ aiMessage.message = streamingResponse.toString();
         });
     }
 
-
-
     private void requestLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             fetchLocationForContext();
@@ -228,14 +233,14 @@ aiMessage.message = streamingResponse.toString();
     @SuppressLint("MissingPermission")
     private void fetchLocationForContext() {
         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-            .addOnSuccessListener(this, location -> {
-                if (location != null) {
-                    lastKnownLocation = location; // Store the location
-                    Log.d(TAG, "Location fetched: " + location.getLatitude() + ", " + location.getLongitude());
-                } else {
-                    Log.e(TAG, "Failed to get location, it was null.");
-                }
-            });
+                .addOnSuccessListener(this, location -> {
+                    if (location != null) {
+                        lastKnownLocation = location;
+                        Log.d(TAG, "Location fetched: " + location.getLatitude() + ", " + location.getLongitude());
+                    } else {
+                        Log.e(TAG, "Failed to get location, it was null.");
+                    }
+                });
     }
 
     private void generateRandomSuggestions() {
@@ -253,20 +258,12 @@ aiMessage.message = streamingResponse.toString();
         });
     }
 
-
-
-
-
     private void addMessageToUI(ChatMessage chatMessage) {
         chatList.add(chatMessage);
         chatAdapter.notifyItemInserted(chatList.size() - 1);
         recyclerViewChat.smoothScrollToPosition(chatList.size() - 1);
         updateEmptyStateUi();
     }
-
-
-
-
 
     private void updateEmptyStateUi() {
         if (chatList.isEmpty()) {
