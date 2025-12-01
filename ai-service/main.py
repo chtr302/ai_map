@@ -4,8 +4,10 @@ from mcp.server.stdio import stdio_server
 from osm_mcp import setup_tools
 from mcp.server.models import InitializationOptions
 from mcp.types import ServerCapabilities
+from dotenv import load_dotenv # Import dotenv
 
 async def main():
+    load_dotenv() # Load biến môi trường từ .env
     app = Server("OsmMCP")
     setup_tools(app)
 
