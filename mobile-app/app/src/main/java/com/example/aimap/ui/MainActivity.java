@@ -41,7 +41,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPlacesButtonClickListener {
     private static final String TAG = "MainActivity";
     private EditText editTextMessage;
     private RecyclerView recyclerViewChat;
@@ -60,7 +60,6 @@ public class MainActivity extends AppCompatActivity {
 
     // Drawer + nút
     private DrawerLayout drawerLayout;
-    private MaterialButton btnShowDetail;
     private MaterialButton buttonNewSession;
     private ImageButton buttonMenu;
     private TextView textViewEmptyChat;
@@ -68,6 +67,8 @@ public class MainActivity extends AppCompatActivity {
     // background
     private ExecutorService executor;
     private Handler mainHandler;
+    private long lastUpdateUiTime = 0;
+    private boolean isGenerating = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,36 +87,25 @@ public class MainActivity extends AppCompatActivity {
         editTextMessage = findViewById(R.id.editTextMessage);
         recyclerViewChat = findViewById(R.id.recyclerViewChat);
         recyclerViewSuggestions = findViewById(R.id.recyclerViewSuggestions);
-        btnShowDetail = findViewById(R.id.btnShowDetail);
         ImageButton buttonSend = findViewById(R.id.buttonSend);
         textViewEmptyChat = findViewById(R.id.textViewEmptyChat);
 
         currentSessionId = java.util.UUID.randomUUID().toString();
 
         chatList = new ArrayList<>();
-        chatAdapter = new ChatAdapter(chatList);
+        chatAdapter = new ChatAdapter(this, chatList, this);
         LinearLayoutManager chatLayoutManager = new LinearLayoutManager(this);
         chatLayoutManager.setStackFromEnd(true);
         recyclerViewChat.setLayoutManager(chatLayoutManager);
         recyclerViewChat.setAdapter(chatAdapter);
 
         suggestionAdapter = new SuggestionAdapter(suggestion -> {
+            if (isGenerating) return; // Chặn click khi đang generate
             editTextMessage.setText(suggestion);
             buttonSend.performClick();
         });
         recyclerViewSuggestions.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         recyclerViewSuggestions.setAdapter(suggestionAdapter);
-
-        // nút xem chi tiết điểm
-        btnShowDetail.setOnClickListener(v -> {
-            double userLat = lastKnownLocation != null ? lastKnownLocation.getLatitude() : 10.77;
-            double userLng = lastKnownLocation != null ? lastKnownLocation.getLongitude() : 106.69;
-            findViewById(R.id.fragmentContainer).setVisibility(View.VISIBLE);
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragmentContainer, SuggestedPlacesFragment.newInstance(userLat, userLng))
-                    .addToBackStack(null)
-                    .commit();
-        });
 
         requestPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
             if (isGranted) {
@@ -130,6 +120,7 @@ public class MainActivity extends AppCompatActivity {
                 java.util.UUID.randomUUID().toString(),
                 currentSessionId,
                 "Xin chào! Tôi là Loco AI, một trợ lý ảo được Hậu xây dựng để chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi một vài câu hỏi nhé.",
+                null,
                 ChatMessage.TYPE_AI,
                 System.currentTimeMillis()
         );
@@ -139,6 +130,14 @@ public class MainActivity extends AppCompatActivity {
         updateEmptyStateUi();
 
         buttonSend.setOnClickListener(v -> {
+            if (isGenerating) {
+                // Xử lý dừng generate
+                apiManager.cancelCurrentRequest();
+                isGenerating = false;
+                toggleSendingState(false);
+                return;
+            }
+
             String msg = editTextMessage.getText().toString().trim();
             if (msg.isEmpty()) {
                 return;
@@ -154,11 +153,14 @@ public class MainActivity extends AppCompatActivity {
             }
 
             editTextMessage.setText("");
+            isGenerating = true;
+            toggleSendingState(true);
 
             ChatMessage userMessage = new ChatMessage(
                     java.util.UUID.randomUUID().toString(),
                     currentSessionId,
                     msg,
+                    null,
                     ChatMessage.TYPE_USER,
                     System.currentTimeMillis()
             );
@@ -178,6 +180,7 @@ public class MainActivity extends AppCompatActivity {
                     java.util.UUID.randomUUID().toString(),
                     currentSessionId,
                     "...",
+                    null,
                     ChatMessage.TYPE_AI,
                     System.currentTimeMillis()
             );
@@ -191,35 +194,101 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onPartialResult(String partialResult) {
+                        if (!isGenerating) return; // Dừng xử lý nếu đã bị cancel
+
                         if (firstChunk) {
                             streamingResponse.setLength(0);
                             firstChunk = false;
                         }
                         streamingResponse.append(partialResult);
-                        aiMessage.message = streamingResponse.toString();
-                        mainHandler.post(() -> {
-                            chatAdapter.notifyItemChanged(chatList.size() - 1);
-                            recyclerViewChat.post(() -> {
-                                if (chatAdapter.getItemCount() > 0) {
-                                    recyclerViewChat.smoothScrollToPosition(chatAdapter.getItemCount() - 1);
-                                }
+                        
+                        // Xử lý chuỗi trong background thread
+                        String currentFullText = streamingResponse.toString();
+                        String textToDisplay;
+                        
+                        if (currentFullText.contains("|||")) {
+                            int splitIndex = currentFullText.indexOf("|||");
+                            textToDisplay = currentFullText.substring(0, splitIndex).trim();
+                        } else {
+                            textToDisplay = currentFullText;
+                        }
+
+                        final String finalText = textToDisplay;
+                        
+                        long currentTime = System.currentTimeMillis();
+                        if (currentTime - lastUpdateUiTime > 100) {
+                            lastUpdateUiTime = currentTime;
+                            mainHandler.post(() -> {
+                                if (!isGenerating) return;
+                                aiMessage.message = finalText;
+                                chatAdapter.updateStreamingMessage(chatList.size() - 1);
                             });
-                        });
+                        }
                     }
 
                     @Override
                     public void onComplete(String fullResult, String error) {
+                        // Reset throttling timer
+                        lastUpdateUiTime = 0;
+                        
+                        if (!isGenerating) return; // Bỏ qua nếu đã cancel
+
+                        mainHandler.post(() -> {
+                            isGenerating = false;
+                            toggleSendingState(false);
+                        });
+                        
                         if (error != null){
                             Log.e(TAG, "API Error in sendMessage: " + error);
                             mainHandler.post(() -> {
-                                aiMessage.message = "Có lỗi khi kết nối với AI rồi. Liên hệ Hậu để được Hậu hỗ trợ nhé, nếu bạn là con gái thì liên hệ qua zalo cho Hậu nheee, còn con trai thì gửi mail đi";
+                                aiMessage.message = "Có lỗi khi kết nối với AI rồi. Liên hệ Hậu để được Hậu hỗ trợ nhé.";
                                 chatAdapter.notifyItemChanged(chatList.size() - 1);
+                            });
+                        } else {
+                            Log.d(TAG, "Full AI Response: " + fullResult);
+                            
+                            String textPart = fullResult;
+                            String jsonPart = null;
+
+                            // Tách JSON
+                            if (fullResult.contains("|||")) {
+                                String[] parts = fullResult.split("\\|\\|\\|");
+                                if (parts.length > 0) textPart = parts[0].trim();
+                                if (parts.length > 1) jsonPart = parts[1].trim();
+                            }
+
+                            final String finalText = textPart;
+                            final String finalJson = jsonPart;
+
+                            mainHandler.post(() -> {
+                                // Cập nhật kết quả cuối cùng
+                                aiMessage.message = finalText;
+                                aiMessage.metadata = finalJson;
+                                
+                                // Gửi payload UPDATE_BUTTON để chỉ hiện nút, không render lại text
+                                chatAdapter.notifyItemChanged(chatList.size() - 1, "UPDATE_BUTTON");
+                                recyclerViewChat.smoothScrollToPosition(chatList.size() - 1);
                             });
                         }
                     }
                 });
             });
         });
+    }
+
+    private void toggleSendingState(boolean generating) {
+        ImageButton buttonSend = findViewById(R.id.buttonSend);
+        if (generating) {
+            buttonSend.setImageResource(android.R.drawable.ic_media_pause);
+            editTextMessage.setEnabled(false);
+            recyclerViewSuggestions.setEnabled(false); // Chặn click vào list
+            recyclerViewSuggestions.setAlpha(0.5f);
+        } else {
+            buttonSend.setImageResource(R.drawable.ic_send);
+            editTextMessage.setEnabled(true);
+            recyclerViewSuggestions.setEnabled(true);
+            recyclerViewSuggestions.setAlpha(1.0f);
+        }
     }
 
     private void requestLocationPermission() {
@@ -273,6 +342,13 @@ public class MainActivity extends AppCompatActivity {
             textViewEmptyChat.setVisibility(View.GONE);
             recyclerViewChat.setVisibility(View.VISIBLE);
         }
+    }
+
+    // Implement interface từ ChatAdapter
+    @Override
+    public void onPlacesButtonClick(String jsonMetadata) {
+        PlacesBottomSheetFragment bottomSheet = PlacesBottomSheetFragment.newInstance(jsonMetadata, lastKnownLocation);
+        bottomSheet.show(getSupportFragmentManager(), bottomSheet.getTag());
     }
 
     @Override

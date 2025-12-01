@@ -45,34 +45,6 @@
                 android:shadowRadius="12"/>
         </FrameLayout>
 
-        <!-- Button chi tiết điểm -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="end"
-            android:orientation="horizontal"
-            android:paddingTop="8dp"
-            android:paddingBottom="4dp"
-            android:paddingEnd="16dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnShowDetail"
-                style="@style/Widget.MaterialComponents.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:text="Chi tiết các địa điểm"
-                android:textSize="15sp"
-                android:textColor="@color/colorAccent"
-                android:textAllCaps="false"
-                app:cornerRadius="20dp"
-                app:iconTint="@color/colorAccent"
-                app:iconPadding="8dp"
-                android:backgroundTint="@color/userBubbleBackground"
-                android:elevation="2dp"
-                android:paddingLeft="16dp"
-                android:paddingRight="16dp"/>
-        </LinearLayout>
-
         <!-- List gợi ý -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerViewSuggestions"
@@ -134,13 +106,6 @@
             </androidx.cardview.widget.CardView>
         </FrameLayout>
     </LinearLayout>
-
-    <!-- Fragment Container -->
-    <FrameLayout
-        android:id="@+id/fragmentContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone"/>
 
     <!-- Navigation Drawer -->
     <LinearLayout
