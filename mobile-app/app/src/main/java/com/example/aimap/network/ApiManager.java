@@ -32,6 +32,7 @@ public class ApiManager {
 
     private OkHttpClient client;
     private boolean inThinkBlock = false;
+    private Call currentCall;
 
     public ApiManager() {
         this.client = new OkHttpClient.Builder()
@@ -39,6 +40,12 @@ public class ApiManager {
                 .readTimeout(60, TimeUnit.SECONDS)
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .build();
+    }
+
+    public void cancelCurrentRequest() {
+        if (currentCall != null && !currentCall.isCanceled()) {
+            currentCall.cancel();
+        }
     }
 
     public interface StreamCallback {
@@ -68,7 +75,7 @@ public class ApiManager {
                 Map<String, Object> requestBody = new HashMap<>();
                 requestBody.put("model", "qwen3:8b");
                 requestBody.put("temperature", 0.7);
-                requestBody.put("max_tokens", 500);
+                requestBody.put("max_tokens", 1500); // Tăng lên 1500
                 List<Map<String, String>> messages = new ArrayList<>();
                 Map<String, String> systemMessage = new HashMap<>();
                 systemMessage.put("role", "system");
@@ -92,9 +99,11 @@ public class ApiManager {
                         .addHeader("Content-Type", "application/json")
                         .build();
                 
-                client.newCall(request).enqueue(new Callback() {
+                currentCall = client.newCall(request);
+                currentCall.enqueue(new Callback() {
                     @Override
                     public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                        if (call.isCanceled()) return;
                         callback.onComplete(null, "Lỗi kết nối: " + e.getMessage());
                     }
 
