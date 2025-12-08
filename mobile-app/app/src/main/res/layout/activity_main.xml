@@ -146,10 +146,12 @@
                 android:textSize="22sp"
                 android:textStyle="bold"/>
         </LinearLayout>
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/surfaceInput"/>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/buttonNewSession"
             style="@style/Widget.MaterialComponents.Button.TextButton"
@@ -162,17 +164,20 @@
             android:layout_margin="16dp"
             android:textAllCaps="false"
             android:backgroundTint="@color/userBubbleBackground"/>
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/surfaceInput"/>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Cuộc trò chuyện mới đây"
+            android:text="Cuộc trò chuyện gần đây"
             android:textColor="@color/textSecondary"
             android:textSize="16sp"
             android:padding="16dp"/>
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerViewDrawerSessions"
             android:layout_width="match_parent"
