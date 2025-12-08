@@ -272,8 +272,23 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             addMessageToUI(aiMessage);
 
             final String finalSystemPrompt = dynamicSystemPrompt;
+            
+            // Lấy lịch sử chat để gửi kèm (Context Awareness)
+            // chatList hiện tại đang chứa: [...History, UserMessage (vừa thêm), AiPlaceholder (vừa thêm)]
+            // Chúng ta cần lấy History, tức là bỏ 2 phần tử cuối.
+            List<ChatMessage> historyToSend = new ArrayList<>();
+            if (chatList.size() > 2) {
+                // Lấy tối đa 20 tin nhắn gần nhất để làm context, hoặc tất cả nếu ít hơn 20
+                int historyEndIndex = chatList.size() - 2;
+                int historyStartIndex = Math.max(0, historyEndIndex - 20); 
+                
+                for (int i = historyStartIndex; i < historyEndIndex; i++) {
+                    historyToSend.add(chatList.get(i));
+                }
+            }
+
             executor.execute(() -> {
-                apiManager.sendMessage(currentSessionId, msg, finalSystemPrompt, new ApiManager.StreamCallback() {
+                apiManager.sendMessage(currentSessionId, msg, finalSystemPrompt, historyToSend, new ApiManager.StreamCallback() {
                     private final StringBuilder streamingResponse = new StringBuilder();
                     private boolean firstChunk = true;
 

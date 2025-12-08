@@ -68,7 +68,7 @@ public class ApiManager {
         return str.substring(i);
     }
 
-    public void sendMessage(String currentSessionId, String userInput, String systemPrompt, StreamCallback callback) {
+    public void sendMessage(String currentSessionId, String userInput, String systemPrompt, List<ChatMessage> history, StreamCallback callback) {
         this.inThinkBlock = false;
         new Thread(() -> {
             try {
@@ -77,11 +77,32 @@ public class ApiManager {
                 requestBody.put("temperature", 0.7);
                 requestBody.put("max_tokens", 1500); // Tăng lên 1500
                 List<Map<String, String>> messages = new ArrayList<>();
+                
+                // 1. System Prompt
                 Map<String, String> systemMessage = new HashMap<>();
                 systemMessage.put("role", "system");
-                systemMessage.put("content", systemPrompt + " /no_think"); // Đây là system prompt không public được, nên ai cần thì liên hệ nhé
+                systemMessage.put("content", systemPrompt + " /no_think"); 
                 messages.add(systemMessage);
 
+                // 2. Chat History
+                if (history != null && !history.isEmpty()) {
+                    for (ChatMessage msg : history) {
+                        Map<String, String> histMsg = new HashMap<>();
+                        // Map local types to API roles
+                        String role = (msg.type == ChatMessage.TYPE_USER) ? "user" : "assistant";
+                        histMsg.put("role", role);
+                        
+                        // Ensure only the text part is sent as content for history
+                        String messageContent = msg.message;
+                        if (messageContent != null && messageContent.contains("|||")) {
+                            messageContent = messageContent.split("\\|\\|\\|")[0].trim();
+                        }
+                        histMsg.put("content", messageContent);
+                        messages.add(histMsg);
+                    }
+                }
+
+                // 3. Current User Input
                 Map<String, String> userMessage = new HashMap<>();
                 userMessage.put("role", "user");
                 userMessage.put("content", userInput);
