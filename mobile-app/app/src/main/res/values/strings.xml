@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">AI Map</string>
+    <string name="app_name" translatable="false">AI Map</string>
     <string-array name="suggestion_questions">
         <item>Quán cà phê nào gần đây có view đẹp?</item>
         <item>Tìm giúp tôi một cây xăng gần đây</item>
@@ -12,4 +12,7 @@
         <item>Gợi ý quán ăn trưa văn phòng.</item>
         <item>Siêu thị hoặc cửa hàng tiện lợi nào gần đây?</item>
     </string-array>
+    <!-- TODO: Thêm OAuth client ID Android tại đây.
+         Lấy giá trị client_id từ Google Cloud Console / Firebase (client type: Android). -->
+    <string name="google_server_client_id" translatable="false">521501666946-32vi0rssupo9vfivv9h7ksr4sce0t6mc.apps.googleusercontent.com</string>
 </resources>
