@@ -2,7 +2,10 @@ package com.example.aimap.ui;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,30 +26,45 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.bumptech.glide.Glide;
 import com.example.aimap.R;
 import com.example.aimap.data.AppDatabase;
 import com.example.aimap.data.ChatMessage;
 import com.example.aimap.data.Session;
+import com.example.aimap.data.SessionManager;
 import com.example.aimap.data.SystemPrompts;
+import com.example.aimap.data.User;
+import com.example.aimap.data.UserSession;
 import com.example.aimap.network.ApiManager;
 import com.example.aimap.ui.adapter.ChatAdapter;
 import com.example.aimap.ui.adapter.SessionAdapter;
 import com.example.aimap.ui.adapter.SuggestionAdapter;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import com.google.android.gms.tasks.Task;
 import com.google.android.material.button.MaterialButton;
 
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPlacesButtonClickListener {
     private static final String TAG = "MainActivity";
+    private static final int MAX_GUEST_QUESTIONS = 5;
 
     private EditText editTextMessage;
     private RecyclerView recyclerViewChat;
@@ -59,23 +77,32 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     private String currentSessionId;
     private ApiManager apiManager;
 
-    // location
+    // User session
+    private SessionManager sessionManager;
+    private UserSession currentUser;
+
+    // Google Sign-In
+    private GoogleSignInClient googleSignInClient;
+    private ActivityResultLauncher<Intent> googleSignInLauncher;
+
+    // Location
     private FusedLocationProviderClient fusedLocationClient;
     private ActivityResultLauncher<String> requestPermissionLauncher;
     private android.location.Location lastKnownLocation;
 
-    // Drawer + nút
+    // UI components
     private DrawerLayout drawerLayout;
     private MaterialButton buttonNewSession;
     private TextView textViewEmptyChat;
+    private ImageButton buttonUser;
 
-    // background
+    // Background
     private ExecutorService executor;
     private Handler mainHandler;
     private long lastUpdateUiTime = 0;
     private boolean isGenerating = false;
 
-    // database
+    // Database
     private AppDatabase database;
 
     @Override
@@ -90,6 +117,10 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         database = AppDatabase.getDatabase(this);
         apiManager = new ApiManager();
 
+        // Khoi tao SessionManager va lay user hien tai (Guest hoac da login)
+        sessionManager = SessionManager.getInstance(this);
+        currentUser = sessionManager.getCurrentUser();
+
         drawerLayout = findViewById(R.id.drawerLayout);
         editTextMessage = findViewById(R.id.editTextMessage);
         recyclerViewChat = findViewById(R.id.recyclerViewChat);
@@ -99,9 +130,26 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         textViewEmptyChat = findViewById(R.id.textViewEmptyChat);
         buttonNewSession = findViewById(R.id.buttonNewSession);
         ImageButton buttonMenu = findViewById(R.id.buttonMenu);
+        buttonUser = findViewById(R.id.buttonUser);
 
-        // Mở drawer
+        // Setup Google Sign-In
+        setupGoogleSignIn();
+
+        // Cap nhat UI avatar/login button
+        updateUserButton();
+
+        // Mo drawer
         buttonMenu.setOnClickListener(v -> drawerLayout.openDrawer(Gravity.START));
+
+        // Click vao avatar/login button
+        buttonUser.setOnClickListener(v -> {
+            if (currentUser.isGuest) {
+                startGoogleSignIn();
+            } else {
+                // Da login, co the show menu hoac profile
+                Toast.makeText(this, "Xin chào " + currentUser.displayName, Toast.LENGTH_SHORT).show();
+            }
+        });
 
         // Chat list
         chatList = new ArrayList<>();
@@ -121,11 +169,10 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         recyclerViewSuggestions.setAdapter(suggestionAdapter);
 
-        // Sessions: click item để load, click nút ... để đổi tên / xóa
+        // Sessions adapter
         sessionAdapter = new SessionAdapter(new SessionAdapter.OnSessionClickListener() {
             @Override
             public void onSessionClick(Session session) {
-                Log.d(TAG, "Click session: " + session.session_id);
                 loadSession(session.session_id);
                 drawerLayout.closeDrawers();
             }
@@ -156,43 +203,10 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 });
         requestLocationPermission();
 
-        // Khởi tạo session từ DB
-        executor.execute(() -> {
-            int count = database.sessionDao().getSessionCount();
-            if (count == 0) {
-                String newId = java.util.UUID.randomUUID().toString();
-                long now = System.currentTimeMillis();
-                Session session = new Session(
-                        newId,
-                        "Cuộc trò chuyện mới",
-                        "",
-                        now
-                );
-                database.sessionDao().insertSession(session);
-                currentSessionId = newId;
-            } else {
-                Session latest = database.sessionDao().getAllSessions().get(0);
-                currentSessionId = latest.session_id;
-            }
+        // Load sessions theo user hien tai
+        loadUserSessions();
 
-            List<Session> all = database.sessionDao().getAllSessions();
-            List<ChatMessage> messages =
-                    database.chatMessageDao().getMessageByeSession(currentSessionId);
-
-            mainHandler.post(() -> {
-                sessionAdapter.setSessions(all);
-                chatList.clear();
-                chatList.addAll(messages);
-                chatAdapter.notifyDataSetChanged();
-                if (chatList.isEmpty()) {
-                    addWelcomeMessage();
-                }
-                generateRandomSuggestions();
-                updateEmptyStateUi();
-            });
-        });
-
-        // Gửi tin nhắn
+        // Gui tin nhan
         buttonSend.setOnClickListener(v -> {
             if (isGenerating) {
                 apiManager.cancelCurrentRequest();
@@ -203,6 +217,12 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
             String msg = editTextMessage.getText().toString().trim();
             if (msg.isEmpty()) return;
+
+            // Check gioi han Guest
+            if (currentUser.isGuest && currentUser.questionCount >= MAX_GUEST_QUESTIONS) {
+                showGuestLimitDialog();
+                return;
+            }
 
             List<String> locationKeywords = Arrays.asList("gần đây", "ở đây", "xung quanh", "quanh đây");
             boolean requiresLocation = locationKeywords.stream().anyMatch(msg::contains);
@@ -215,12 +235,18 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 return;
             }
 
+            // Tang so cau hoi cua Guest
+            if (currentUser.isGuest) {
+                sessionManager.incrementQuestionCount();
+                currentUser = sessionManager.getCurrentUser(); // Refresh
+            }
+
             editTextMessage.setText("");
             isGenerating = true;
             toggleSendingState(true);
 
             ChatMessage userMessage = new ChatMessage(
-                    java.util.UUID.randomUUID().toString(),
+                    UUID.randomUUID().toString(),
                     currentSessionId,
                     msg,
                     null,
@@ -229,12 +255,9 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             );
             addMessageToUI(userMessage);
 
-            // Lưu user message vào DB
-            executor.execute(() ->
-                    database.chatMessageDao().insertMessage(userMessage)
-            );
+            executor.execute(() -> database.chatMessageDao().insertMessage(userMessage));
 
-            // Cập nhật Session với câu hỏi
+            // Cap nhat session title
             executor.execute(() -> {
                 Session s = database.sessionDao().getSessionById(currentSessionId);
                 if (s != null) {
@@ -246,7 +269,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                     s.setLast_updated(System.currentTimeMillis());
                     database.sessionDao().updateSession(s);
 
-                    List<Session> all = database.sessionDao().getAllSessions();
+                    List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
                     mainHandler.post(() -> sessionAdapter.setSessions(all));
                 }
             });
@@ -262,7 +285,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             }
 
             ChatMessage aiMessage = new ChatMessage(
-                    java.util.UUID.randomUUID().toString(),
+                    UUID.randomUUID().toString(),
                     currentSessionId,
                     "...",
                     null,
@@ -273,12 +296,9 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
             final String finalSystemPrompt = dynamicSystemPrompt;
             
-            // Lấy lịch sử chat để gửi kèm (Context Awareness)
-            // chatList hiện tại đang chứa: [...History, UserMessage (vừa thêm), AiPlaceholder (vừa thêm)]
-            // Chúng ta cần lấy History, tức là bỏ 2 phần tử cuối.
+            // Lay lich su chat de gui kem
             List<ChatMessage> historyToSend = new ArrayList<>();
             if (chatList.size() > 2) {
-                // Lấy tối đa 20 tin nhắn gần nhất để làm context, hoặc tất cả nếu ít hơn 20
                 int historyEndIndex = chatList.size() - 2;
                 int historyStartIndex = Math.max(0, historyEndIndex - 20); 
                 
@@ -337,14 +357,12 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                         });
 
                         if (error != null) {
-                            Log.e(TAG, "API Error in sendMessage: " + error);
+                            Log.e(TAG, "API Error: " + error);
                             mainHandler.post(() -> {
-                                aiMessage.message = "Có lỗi khi kết nối với AI rồi. Liên hệ Hậu để được Hậu hỗ trợ nhé.";
+                                aiMessage.message = "Có lỗi khi kết nối với AI. Vui lòng thử lại.";
                                 chatAdapter.notifyItemChanged(chatList.size() - 1);
                             });
                         } else {
-                            Log.d(TAG, "Full AI Response: " + fullResult);
-
                             String textPart = fullResult;
                             String jsonPart = null;
 
@@ -367,7 +385,6 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                                 }
                             });
 
-                            // Lưu AI message + update preview session
                             executor.execute(() -> {
                                 database.chatMessageDao().insertMessage(aiMessage);
 
@@ -376,7 +393,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                                     s.setPreview_message(finalText);
                                     s.setLast_updated(System.currentTimeMillis());
                                     database.sessionDao().updateSession(s);
-                                    List<Session> all = database.sessionDao().getAllSessions();
+                                    List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
                                     mainHandler.post(() -> sessionAdapter.setSessions(all));
                                 }
                             });
@@ -387,35 +404,209 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         });
     }
 
-    private void toggleSendingState(boolean generating) {
-        ImageButton buttonSend = findViewById(R.id.buttonSend);
-        if (generating) {
-            buttonSend.setImageResource(android.R.drawable.ic_media_pause);
-            editTextMessage.setEnabled(false);
-            recyclerViewSuggestions.setEnabled(false);
-            recyclerViewSuggestions.setAlpha(0.5f);
-        } else {
-            buttonSend.setImageResource(R.drawable.ic_send);
-            editTextMessage.setEnabled(true);
-            recyclerViewSuggestions.setEnabled(true);
-            recyclerViewSuggestions.setAlpha(1.0f);
+    private void setupGoogleSignIn() {
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .build();
+
+        googleSignInClient = GoogleSignIn.getClient(this, gso);
+
+        googleSignInLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                        Task<GoogleSignInAccount> task =
+                                GoogleSignIn.getSignedInAccountFromIntent(result.getData());
+                        handleGoogleSignInResult(task);
+                    }
+                });
+    }
+
+    private void startGoogleSignIn() {
+        if (googleSignInClient != null) {
+            Intent signInIntent = googleSignInClient.getSignInIntent();
+            googleSignInLauncher.launch(signInIntent);
         }
     }
 
+    private void handleGoogleSignInResult(Task<GoogleSignInAccount> completedTask) {
+        try {
+            GoogleSignInAccount account = completedTask.getResult(ApiException.class);
+            if (account == null) {
+                Toast.makeText(this, "Không lấy được thông tin tài khoản Google", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            String googleUserId = account.getId();
+            String displayName = account.getDisplayName();
+            String email = account.getEmail();
+            String avatarUrl = account.getPhotoUrl() != null ? account.getPhotoUrl().toString() : null;
+
+            // Luu vao DB
+            executor.execute(() -> {
+                User existingUser = database.userDao().getUserByGoogleId(googleUserId);
+
+                if (existingUser == null) {
+                    // Tao user moi
+                    String userId = "google-" + googleUserId;
+                    long now = System.currentTimeMillis();
+                    User newUser = new User(
+                            userId,
+                            googleUserId,
+                            displayName,
+                            email,
+                            avatarUrl,
+                            false,
+                            0,
+                            now,
+                            now
+                    );
+                    database.userDao().insertUser(newUser);
+
+                    // Merge session tu Guest sang User moi
+                    String oldGuestUserId = currentUser.userId;
+                    database.sessionDao().updateSessionsUserId(oldGuestUserId, userId);
+
+                    existingUser = newUser;
+                } else {
+                    // Cap nhat thong tin
+                    existingUser.setDisplayName(displayName);
+                    existingUser.setEmail(email);
+                    existingUser.setAvatarUrl(avatarUrl);
+                    existingUser.setUpdatedAt(System.currentTimeMillis());
+                    database.userDao().updateUser(existingUser);
+                }
+
+                // Cap nhat SessionManager
+                User finalUser = existingUser;
+                mainHandler.post(() -> {
+                    currentUser = new UserSession(
+                            finalUser.userId,
+                            finalUser.displayName,
+                            finalUser.email,
+                            finalUser.avatarUrl,
+                            false,
+                            UserSession.PROVIDER_GOOGLE,
+                            finalUser.questionCount
+                    );
+                    sessionManager.setCurrentUser(currentUser);
+
+                    Toast.makeText(this, "Đăng nhập thành công!", Toast.LENGTH_SHORT).show();
+                    updateUserButton();
+
+                    // Load lai sessions
+                    loadUserSessions();
+                });
+            });
+
+        } catch (ApiException e) {
+            Log.e(TAG, "Google sign-in failed", e);
+            Toast.makeText(this, "Đăng nhập Google thất bại", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void updateUserButton() {
+        if (currentUser.isGuest) {
+            // Hien thi icon mac dinh cho Guest
+            buttonUser.setImageResource(R.drawable.ic_avatar);
+        } else {
+            // Load avatar tu Google
+            if (currentUser.avatarUrl != null && !currentUser.avatarUrl.isEmpty()) {
+                Glide.with(this)
+                        .load(currentUser.avatarUrl)
+                        .circleCrop()
+                        .placeholder(R.drawable.ic_avatar)
+                        .into(buttonUser);
+            } else {
+                buttonUser.setImageResource(R.drawable.ic_avatar);
+            }
+        }
+    }
+
+    private void showGuestLimitDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_guest_limit, null);
+        MaterialButton buttonLoginNow = dialogView.findViewById(R.id.buttonLoginNow);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogView)
+                .setCancelable(true)
+                .create();
+
+        // Lam mo background va center dialog
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            dialog.getWindow().setDimAmount(0.7f); // Lam mo 70%
+        }
+
+        buttonLoginNow.setOnClickListener(v -> {
+            dialog.dismiss();
+            startGoogleSignIn();
+        });
+
+        dialog.show();
+    }
+
+    private void loadUserSessions() {
+        executor.execute(() -> {
+            String userId = currentUser.userId;
+
+            // Kiem tra xem user co session nao khong
+            int count = database.sessionDao().getSessionCountByUserId(userId);
+            if (count == 0) {
+                // Tao session moi
+                String newId = UUID.randomUUID().toString();
+                long now = System.currentTimeMillis();
+                Session session = new Session(
+                        newId,
+                        userId,
+                        "Cuộc trò chuyện mới",
+                        "",
+                        now,
+                        false
+                );
+                database.sessionDao().insertSession(session);
+                currentSessionId = newId;
+        } else {
+                // Lay session moi nhat
+                List<Session> sessions = database.sessionDao().getSessionsByUserId(userId);
+                if (!sessions.isEmpty()) {
+                    currentSessionId = sessions.get(0).session_id;
+                }
+            }
+
+            List<Session> allSessions = database.sessionDao().getSessionsByUserId(userId);
+            List<ChatMessage> messages = database.chatMessageDao().getMessageByeSession(currentSessionId);
+
+            mainHandler.post(() -> {
+                sessionAdapter.setSessions(allSessions);
+                chatList.clear();
+                chatList.addAll(messages);
+                chatAdapter.notifyDataSetChanged();
+                if (chatList.isEmpty()) {
+                    addWelcomeMessage();
+                }
+                generateRandomSuggestions();
+                updateEmptyStateUi();
+            });
+        });
+    }
+
     private void createNewSession() {
-        currentSessionId = java.util.UUID.randomUUID().toString();
+        currentSessionId = UUID.randomUUID().toString();
         long now = System.currentTimeMillis();
 
         Session session = new Session(
                 currentSessionId,
+                currentUser.userId,
                 "Cuộc trò chuyện mới",
                 "",
-                now
+                now,
+                false
         );
 
         executor.execute(() -> {
             database.sessionDao().insertSession(session);
-            List<Session> all = database.sessionDao().getAllSessions();
+            List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
             mainHandler.post(() -> {
                 chatList.clear();
                 chatAdapter.notifyDataSetChanged();
@@ -427,12 +618,9 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     }
 
     private void loadSession(String sessionId) {
-        Log.d(TAG, "loadSession: " + sessionId);
         currentSessionId = sessionId;
         executor.execute(() -> {
-            List<ChatMessage> messages =
-                    database.chatMessageDao().getMessageByeSession(sessionId);
-            Log.d(TAG, "messages size = " + messages.size());
+            List<ChatMessage> messages = database.chatMessageDao().getMessageByeSession(sessionId);
             mainHandler.post(() -> {
                 chatList.clear();
                 chatList.addAll(messages);
@@ -448,17 +636,20 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         });
     }
 
-    // Dialog: Đổi tên / Xóa cuộc trò chuyện
     private void showSessionOptionsDialog(Session session) {
-        String[] options = {"Đổi tên", "Xóa cuộc trò chuyện"};
+        String[] options = {"Đổi tên", "Ghim", "Xóa"};
+        if (session.isPinned) {
+            options[1] = "Bỏ ghim";
+        }
+
         new AlertDialog.Builder(this)
-                .setTitle(session.title == null || session.title.isEmpty()
-                        ? "Cuộc trò chuyện"
-                        : session.title)
+                .setTitle(session.title)
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) {
                         showRenameDialog(session);
                     } else if (which == 1) {
+                        togglePinSession(session);
+                    } else if (which == 2) {
                         confirmDeleteSession(session);
                     }
                 })
@@ -479,7 +670,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                             session.setTitle(newTitle);
                             session.setLast_updated(System.currentTimeMillis());
                             database.sessionDao().updateSession(session);
-                            List<Session> all = database.sessionDao().getAllSessions();
+                            List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
                             mainHandler.post(() -> sessionAdapter.setSessions(all));
                         });
                     }
@@ -488,55 +679,58 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 .show();
     }
 
+    private void togglePinSession(Session session) {
+        executor.execute(() -> {
+            session.setPinned(!session.isPinned());
+            session.setLast_updated(System.currentTimeMillis());
+            database.sessionDao().updateSession(session);
+            List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
+            mainHandler.post(() -> sessionAdapter.setSessions(all));
+        });
+    }
+
     private void confirmDeleteSession(Session session) {
         executor.execute(() -> {
-            int count = database.sessionDao().getSessionCount();
+            int count = database.sessionDao().getSessionCountByUserId(currentUser.userId);
 
-            // Nếu chỉ còn 1 session và nó là "Cuộc trò chuyện mới" -> không cho xóa
             if (count <= 1) {
-                if (session.title == null || session.title.trim().isEmpty()
-                        || "Cuộc trò chuyện mới".equals(session.title.trim())) {
                     mainHandler.post(() ->
                             Toast.makeText(this,
-                                    "Phải luôn có ít nhất 1 cuộc trò chuyện mới, không thể xóa.",
+                                "Phải luôn có ít nhất 1 cuộc trò chuyện.",
                                     Toast.LENGTH_LONG).show()
                     );
                     return;
-                }
             }
 
-            // Cho phép xóa -> show dialog xác nhận
             mainHandler.post(() -> {
                 new AlertDialog.Builder(this)
                         .setTitle("Xóa cuộc trò chuyện")
                         .setMessage("Bạn có chắc muốn xóa cuộc trò chuyện này không?")
                         .setPositiveButton("Xóa", (dialog, which) -> {
                             executor.execute(() -> {
-                                // Xóa toàn bộ message thuộc session
                                 database.chatMessageDao().deleteMessagesBySession(session.session_id);
-                                // Xóa session
                                 database.sessionDao().deleteSessionById(session.session_id);
 
-                                // Lấy danh sách còn lại
-                                List<Session> remaining = database.sessionDao().getAllSessions();
+                                List<Session> remaining = database.sessionDao().getSessionsByUserId(currentUser.userId);
                                 if (remaining.isEmpty()) {
-                                    String newId = java.util.UUID.randomUUID().toString();
+                                    String newId = UUID.randomUUID().toString();
                                     long now = System.currentTimeMillis();
                                     Session newSession = new Session(
                                             newId,
+                                            currentUser.userId,
                                             "Cuộc trò chuyện mới",
                                             "",
-                                            now
+                                            now,
+                                            false
                                     );
                                     database.sessionDao().insertSession(newSession);
-                                    remaining = database.sessionDao().getAllSessions();
+                                    remaining = database.sessionDao().getSessionsByUserId(currentUser.userId);
                                     currentSessionId = newId;
                                 } else {
                                     currentSessionId = remaining.get(0).session_id;
                                 }
 
-                                List<ChatMessage> msgs =
-                                        database.chatMessageDao().getMessageByeSession(currentSessionId);
+                                List<ChatMessage> msgs = database.chatMessageDao().getMessageByeSession(currentSessionId);
 
                                 List<Session> finalRemaining = remaining;
                                 mainHandler.post(() -> {
@@ -569,9 +763,6 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 .addOnSuccessListener(this, location -> {
                     if (location != null) {
                         lastKnownLocation = location;
-                        Log.d(TAG, "Location fetched: " + location.getLatitude() + ", " + location.getLongitude());
-                    } else {
-                        Log.e(TAG, "Failed to get location, it was null.");
                     }
                 });
     }
@@ -586,7 +777,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 List<String> randomSuggestions = suggestionList.subList(0, suggestionCount);
                 suggestionAdapter.updateSuggestions(randomSuggestions);
             } catch (Exception e) {
-                Log.e(TAG, "Error generating random suggestions", e);
+                Log.e(TAG, "Error generating suggestions", e);
             }
         });
     }
@@ -613,21 +804,33 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
     private void addWelcomeMessage() {
         ChatMessage welcomeMessage = new ChatMessage(
-                java.util.UUID.randomUUID().toString(),
+                UUID.randomUUID().toString(),
                 currentSessionId,
-                "Xin chào! Tôi là Loco AI, một trợ lý ảo được Hậu xây dựng để chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi một vài câu hỏi nhé.",
+                "Xin chào! Tôi là Loco AI, một trợ lý ảo chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi biết bạn cần tìm gì nhé.",
                 null,
                 ChatMessage.TYPE_AI,
                 System.currentTimeMillis()
         );
         addMessageToUI(welcomeMessage);
 
-        // Lưu welcome vào DB
-        executor.execute(() ->
-                database.chatMessageDao().insertMessage(welcomeMessage)
-        );
+        executor.execute(() -> database.chatMessageDao().insertMessage(welcomeMessage));
 
         generateRandomSuggestions();
+    }
+
+    private void toggleSendingState(boolean generating) {
+        ImageButton buttonSend = findViewById(R.id.buttonSend);
+        if (generating) {
+            buttonSend.setImageResource(android.R.drawable.ic_media_pause);
+            editTextMessage.setEnabled(false);
+            recyclerViewSuggestions.setEnabled(false);
+            recyclerViewSuggestions.setAlpha(0.5f);
+        } else {
+            buttonSend.setImageResource(R.drawable.ic_send);
+            editTextMessage.setEnabled(true);
+            recyclerViewSuggestions.setEnabled(true);
+            recyclerViewSuggestions.setAlpha(1.0f);
+        }
     }
 
     @Override

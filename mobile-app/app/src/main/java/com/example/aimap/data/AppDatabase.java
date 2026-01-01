@@ -8,15 +8,17 @@ import androidx.room.RoomDatabase;
 
 import com.example.aimap.data.dao.ChatMessageDao;
 import com.example.aimap.data.dao.SessionDao;
+import com.example.aimap.data.dao.UserDao;
 
 @Database(
-        entities = {ChatMessage.class, Session.class},
-        version = 3,
+        entities = {ChatMessage.class, Session.class, User.class},
+        version = 4,
         exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
     public abstract ChatMessageDao chatMessageDao();
     public abstract SessionDao sessionDao();
+    public abstract UserDao userDao();
 
     private static volatile AppDatabase INSTANCE;
 

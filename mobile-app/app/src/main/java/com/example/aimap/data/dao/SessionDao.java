@@ -27,6 +27,15 @@ public interface SessionDao {
     @Query("SELECT * FROM sessions ORDER BY last_updated DESC")
     List<Session> getAllSessions();
 
+    @Query("SELECT * FROM sessions WHERE userId = :userId ORDER BY isPinned DESC, last_updated DESC")
+    List<Session> getSessionsByUserId(String userId);
+
+    @Query("UPDATE sessions SET userId = :newUserId WHERE userId = :oldUserId")
+    void updateSessionsUserId(String oldUserId, String newUserId);
+
     @Query("SELECT COUNT(*) FROM sessions")
     int getSessionCount();
+
+    @Query("SELECT COUNT(*) FROM sessions WHERE userId = :userId")
+    int getSessionCountByUserId(String userId);
 }
