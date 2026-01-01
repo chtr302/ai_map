@@ -49,6 +49,13 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.Task;
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.auth.AuthCredential;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.auth.GoogleAuthProvider;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.SetOptions;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -85,6 +92,10 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     private GoogleSignInClient googleSignInClient;
     private ActivityResultLauncher<Intent> googleSignInLauncher;
 
+    // Firebase
+    private FirebaseAuth mAuth;
+    private FirebaseFirestore firestore;
+
     // Location
     private FusedLocationProviderClient fusedLocationClient;
     private ActivityResultLauncher<String> requestPermissionLauncher;
@@ -112,6 +123,11 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
         executor = Executors.newSingleThreadExecutor();
         mainHandler = new Handler(Looper.getMainLooper());
+
+        // Firebase
+        FirebaseApp.initializeApp(this);
+        mAuth = FirebaseAuth.getInstance();
+        firestore = FirebaseFirestore.getInstance();
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         database = AppDatabase.getDatabase(this);
@@ -255,7 +271,10 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             );
             addMessageToUI(userMessage);
 
-            executor.execute(() -> database.chatMessageDao().insertMessage(userMessage));
+            executor.execute(() -> {
+                database.chatMessageDao().insertMessage(userMessage);
+                syncMessageToFirestore(currentSessionId, userMessage);
+            });
 
             // Cap nhat session title
             executor.execute(() -> {
@@ -268,6 +287,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                     s.setPreview_message(msg);
                     s.setLast_updated(System.currentTimeMillis());
                     database.sessionDao().updateSession(s);
+                    syncSessionToFirestore(s);
 
                     List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
                     mainHandler.post(() -> sessionAdapter.setSessions(all));
@@ -387,12 +407,14 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
                             executor.execute(() -> {
                                 database.chatMessageDao().insertMessage(aiMessage);
+                                syncMessageToFirestore(currentSessionId, aiMessage);
 
                                 Session s = database.sessionDao().getSessionById(currentSessionId);
                                 if (s != null) {
                                     s.setPreview_message(finalText);
                                     s.setLast_updated(System.currentTimeMillis());
                                     database.sessionDao().updateSession(s);
+                                    syncSessionToFirestore(s);
                                     List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
                                     mainHandler.post(() -> sessionAdapter.setSessions(all));
                                 }
@@ -406,6 +428,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
     private void setupGoogleSignIn() {
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(getString(R.string.default_web_client_id))
                 .requestEmail()
                 .build();
 
@@ -437,13 +460,28 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 return;
             }
 
-            String googleUserId = account.getId();
-            String displayName = account.getDisplayName();
-            String email = account.getEmail();
-            String avatarUrl = account.getPhotoUrl() != null ? account.getPhotoUrl().toString() : null;
+            // Sign in voi Firebase
+            String idToken = account.getIdToken();
+            AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
 
-            // Luu vao DB
-            executor.execute(() -> {
+            mAuth.signInWithCredential(credential).addOnCompleteListener(this, task -> {
+                if (!task.isSuccessful()) {
+                    Toast.makeText(this, "Đăng nhập Firebase thất bại", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                FirebaseUser firebaseUser = mAuth.getCurrentUser();
+                if (firebaseUser == null) return;
+
+                String googleUserId = firebaseUser.getUid();
+                String displayName = firebaseUser.getDisplayName();
+                String email = firebaseUser.getEmail();
+                String avatarUrl = firebaseUser.getPhotoUrl() != null ? firebaseUser.getPhotoUrl().toString() : null;
+
+                // Luu vao Firestore va Room
+                saveUserToFirestore(googleUserId, displayName, email, avatarUrl);
+
+                executor.execute(() -> {
                 User existingUser = database.userDao().getUserByGoogleId(googleUserId);
 
                 if (existingUser == null) {
@@ -496,11 +534,14 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
                     // Load lai sessions
                     loadUserSessions();
+
+                    // Sync sessions voi Firestore
+                    syncLocalSessionsToFirestore();
                 });
+            });
             });
 
         } catch (ApiException e) {
-            Log.e(TAG, "Google sign-in failed", e);
             Toast.makeText(this, "Đăng nhập Google thất bại", Toast.LENGTH_SHORT).show();
         }
     }
@@ -565,6 +606,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                         false
                 );
                 database.sessionDao().insertSession(session);
+                syncSessionToFirestore(session);
                 currentSessionId = newId;
         } else {
                 // Lay session moi nhat
@@ -606,6 +648,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
         executor.execute(() -> {
             database.sessionDao().insertSession(session);
+            syncSessionToFirestore(session);
             List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
             mainHandler.post(() -> {
                 chatList.clear();
@@ -670,6 +713,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                             session.setTitle(newTitle);
                             session.setLast_updated(System.currentTimeMillis());
                             database.sessionDao().updateSession(session);
+                            syncSessionToFirestore(session);
                             List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
                             mainHandler.post(() -> sessionAdapter.setSessions(all));
                         });
@@ -684,6 +728,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             session.setPinned(!session.isPinned());
             session.setLast_updated(System.currentTimeMillis());
             database.sessionDao().updateSession(session);
+            syncSessionToFirestore(session);
             List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
             mainHandler.post(() -> sessionAdapter.setSessions(all));
         });
@@ -724,6 +769,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                                             false
                                     );
                                     database.sessionDao().insertSession(newSession);
+                                    syncSessionToFirestore(newSession);
                                     remaining = database.sessionDao().getSessionsByUserId(currentUser.userId);
                                     currentSessionId = newId;
                                 } else {
@@ -813,7 +859,10 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         );
         addMessageToUI(welcomeMessage);
 
-        executor.execute(() -> database.chatMessageDao().insertMessage(welcomeMessage));
+        executor.execute(() -> {
+            database.chatMessageDao().insertMessage(welcomeMessage);
+            syncMessageToFirestore(currentSessionId, welcomeMessage);
+        });
 
         generateRandomSuggestions();
     }
@@ -838,6 +887,79 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         PlacesBottomSheetFragment bottomSheet =
                 PlacesBottomSheetFragment.newInstance(jsonMetadata, lastKnownLocation);
         bottomSheet.show(getSupportFragmentManager(), bottomSheet.getTag());
+    }
+
+    private void saveUserToFirestore(String uid, String displayName, String email, String photoUrl) {
+        java.util.Map<String, Object> user = new java.util.HashMap<>();
+        user.put("uid", uid);
+        user.put("displayName", displayName);
+        user.put("email", email);
+        user.put("photoUrl", photoUrl);
+        user.put("updatedAt", System.currentTimeMillis());
+
+        firestore.collection("users").document(uid)
+                .set(user, SetOptions.merge());
+    }
+
+    private void syncLocalSessionsToFirestore() {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        if (firebaseUser == null) return;
+
+        String uid = firebaseUser.getUid();
+
+        executor.execute(() -> {
+            List<Session> localSessions = database.sessionDao().getSessionsByUserId(currentUser.userId);
+
+            for (Session session : localSessions) {
+                java.util.Map<String, Object> sessionData = new java.util.HashMap<>();
+                sessionData.put("sessionId", session.session_id);
+                sessionData.put("userId", uid);
+                sessionData.put("title", session.title);
+                sessionData.put("previewMessage", session.preview_message);
+                sessionData.put("lastUpdated", session.last_updated);
+                sessionData.put("isPinned", session.isPinned);
+
+                firestore.collection("sessions").document(session.session_id)
+                        .set(sessionData, SetOptions.merge());
+
+                List<ChatMessage> messages = database.chatMessageDao().getMessageByeSession(session.session_id);
+                for (ChatMessage msg : messages) {
+                    syncMessageToFirestore(session.session_id, msg);
+                }
+            }
+        });
+    }
+
+    private void syncSessionToFirestore(Session session) {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        if (firebaseUser == null) return;
+
+        java.util.Map<String, Object> sessionData = new java.util.HashMap<>();
+        sessionData.put("sessionId", session.session_id);
+        sessionData.put("userId", firebaseUser.getUid());
+        sessionData.put("title", session.title);
+        sessionData.put("previewMessage", session.preview_message);
+        sessionData.put("lastUpdated", session.last_updated);
+        sessionData.put("isPinned", session.isPinned);
+
+        firestore.collection("sessions").document(session.session_id)
+                .set(sessionData, SetOptions.merge());
+    }
+
+    private void syncMessageToFirestore(String sessionId, ChatMessage message) {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        if (firebaseUser == null) return;
+
+        java.util.Map<String, Object> messageData = new java.util.HashMap<>();
+        messageData.put("messageId", message.message_id);
+        messageData.put("message", message.message);
+        messageData.put("metadata", message.metadata);
+        messageData.put("type", message.type);
+        messageData.put("timestamp", message.timestamp);
+
+        firestore.collection("sessions").document(sessionId)
+                .collection("messages").document(message.message_id)
+                .set(messageData, SetOptions.merge());
     }
 
     @Override
