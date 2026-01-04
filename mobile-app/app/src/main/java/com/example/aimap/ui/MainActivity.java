@@ -21,7 +21,9 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -32,6 +34,7 @@ import com.example.aimap.data.AppDatabase;
 import com.example.aimap.data.ChatMessage;
 import com.example.aimap.data.Session;
 import com.example.aimap.data.SessionManager;
+import com.example.aimap.data.SettingsManager;
 import com.example.aimap.data.SystemPrompts;
 import com.example.aimap.data.User;
 import com.example.aimap.data.UserSession;
@@ -88,6 +91,9 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     private SessionManager sessionManager;
     private UserSession currentUser;
 
+    // Settings
+    private SettingsManager settingsManager;
+
     // Google Sign-In
     private GoogleSignInClient googleSignInClient;
     private ActivityResultLauncher<Intent> googleSignInLauncher;
@@ -118,6 +124,13 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Khởi tạo SettingsManager trước setContentView
+        settingsManager = SettingsManager.getInstance(this);
+
+        // Áp dụng theme và ngôn ngữ
+        applyThemeOnStartup();
+        applyLanguageOnStartup();
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -133,7 +146,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         database = AppDatabase.getDatabase(this);
         apiManager = new ApiManager();
 
-        // Khoi tao SessionManager va lay user hien tai (Guest hoac da login)
+        // Khởi tạo SessionManager và lấy user hiện tại (Guest hoặc đã login)
         sessionManager = SessionManager.getInstance(this);
         currentUser = sessionManager.getCurrentUser();
 
@@ -151,19 +164,19 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         // Setup Google Sign-In
         setupGoogleSignIn();
 
-        // Cap nhat UI avatar/login button
+        // Cập nhật UI avatar/login button
         updateUserButton();
 
         // Mo drawer
-        buttonMenu.setOnClickListener(v -> drawerLayout.openDrawer(Gravity.START));
+        buttonMenu.setOnClickListener(v -> drawerLayout.openDrawer(GravityCompat.START));
 
         // Click vao avatar/login button
         buttonUser.setOnClickListener(v -> {
             if (currentUser.isGuest) {
                 startGoogleSignIn();
             } else {
-                // Da login, co the show menu hoac profile
-                Toast.makeText(this, "Xin chào " + currentUser.displayName, Toast.LENGTH_SHORT).show();
+                // Đã login, show menu dropdown
+                showUserMenu(v);
             }
         });
 
@@ -213,7 +226,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                         fetchLocationForContext();
                     } else {
                         Toast.makeText(this,
-                                "Không có quyền truy cập vị trí, một số câu hỏi sẽ không hoạt động.",
+                                getString(R.string.location_denied_message),
                                 Toast.LENGTH_LONG).show();
                     }
                 });
@@ -246,7 +259,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             if (requiresLocation &&
                     ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                             != PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Câu hỏi này cần vị trí, vui lòng cấp quyền...", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.location_permission_message), Toast.LENGTH_SHORT).show();
                 requestLocationPermission();
                 return;
             }
@@ -328,6 +341,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             }
 
             executor.execute(() -> {
+                boolean thinkingEnabled = settingsManager.isThinkingEnabled();
                 apiManager.sendMessage(currentSessionId, msg, finalSystemPrompt, historyToSend, new ApiManager.StreamCallback() {
                     private final StringBuilder streamingResponse = new StringBuilder();
                     private boolean firstChunk = true;
@@ -359,11 +373,12 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                             lastUpdateUiTime = currentTime;
                             mainHandler.post(() -> {
                                 if (!isGenerating) return;
-                                aiMessage.message = finalText;
+                                aiMessage.content = finalText;
                                 chatAdapter.updateStreamingMessage(chatList.size() - 1);
                             });
                         }
                     }
+
 
                     @Override
                     public void onComplete(String fullResult, String error) {
@@ -379,7 +394,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                         if (error != null) {
                             Log.e(TAG, "API Error: " + error);
                             mainHandler.post(() -> {
-                                aiMessage.message = "Có lỗi khi kết nối với AI. Vui lòng thử lại.";
+                                aiMessage.content = getString(R.string.error_message);
                                 chatAdapter.notifyItemChanged(chatList.size() - 1);
                             });
                         } else {
@@ -396,7 +411,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                             final String finalJson = jsonPart;
 
                             mainHandler.post(() -> {
-                                aiMessage.message = finalText;
+                                aiMessage.content = finalText;
                                 aiMessage.metadata = finalJson;
                                 chatAdapter.notifyItemChanged(chatList.size() - 1, "UPDATE_BUTTON");
                                 int lastIndex = chatAdapter.getItemCount() - 1;
@@ -456,7 +471,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         try {
             GoogleSignInAccount account = completedTask.getResult(ApiException.class);
             if (account == null) {
-                Toast.makeText(this, "Không lấy được thông tin tài khoản Google", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.google_account_error), Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -466,7 +481,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
             mAuth.signInWithCredential(credential).addOnCompleteListener(this, task -> {
                 if (!task.isSuccessful()) {
-                    Toast.makeText(this, "Đăng nhập Firebase thất bại", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.firebase_login_error), Toast.LENGTH_SHORT).show();
                     return;
                 }
 
@@ -529,7 +544,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                     );
                     sessionManager.setCurrentUser(currentUser);
 
-                    Toast.makeText(this, "Đăng nhập thành công!", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.login_success), Toast.LENGTH_SHORT).show();
                     updateUserButton();
 
                     // Load lai sessions
@@ -537,13 +552,147 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
                     // Sync sessions voi Firestore
                     syncLocalSessionsToFirestore();
+
+                    // Attach realtime listeners
+                    attachFirebaseListenersIfNeeded();
                 });
             });
             });
 
         } catch (ApiException e) {
-            Toast.makeText(this, "Đăng nhập Google thất bại", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.google_login_error), Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void applyThemeOnStartup() {
+        int nightMode = settingsManager.isDarkThemeEnabled() ?
+                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES :
+                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO;
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode);
+    }
+
+    private void applyLanguageOnStartup() {
+        String language = settingsManager.getLanguage();
+        java.util.Locale locale = new java.util.Locale(language);
+        java.util.Locale.setDefault(locale);
+
+        android.content.res.Configuration config = new android.content.res.Configuration();
+        config.setLocale(locale);
+        getResources().updateConfiguration(config, getResources().getDisplayMetrics());
+    }
+
+    private void showUserMenu(View anchor) {
+        PopupMenu popupMenu = new PopupMenu(this, anchor, Gravity.END, 0, R.style.PopupMenuStyle);
+        popupMenu.getMenuInflater().inflate(R.menu.user_menu, popupMenu.getMenu());
+
+        popupMenu.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.menu_settings) {
+                showSettingsDialog();
+                return true;
+            } else if (item.getItemId() == R.id.menu_logout) {
+                handleLogout();
+                return true;
+            }
+            return false;
+        });
+
+        popupMenu.show();
+    }
+
+    private void showSettingsDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_settings, null);
+
+        androidx.appcompat.widget.SwitchCompat switchTheme = dialogView.findViewById(R.id.switchTheme);
+        androidx.appcompat.widget.SwitchCompat switchLanguage = dialogView.findViewById(R.id.switchLanguage);
+        androidx.appcompat.widget.SwitchCompat switchThinking = dialogView.findViewById(R.id.switchThinking);
+
+        // Set giá trị hiện tại
+        switchTheme.setChecked(settingsManager.isDarkThemeEnabled());
+        switchLanguage.setChecked(SettingsManager.LANG_EN.equals(settingsManager.getLanguage()));
+        switchThinking.setChecked(settingsManager.isThinkingEnabled());
+
+        Log.d(TAG, "Initial theme: " + settingsManager.isDarkThemeEnabled());
+        Log.d(TAG, "Initial language: " + settingsManager.getLanguage());
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.settings_title))
+                .setView(dialogView)
+                .setPositiveButton(getString(R.string.settings_save), (d, which) -> {
+                    boolean themeChanged = settingsManager.isDarkThemeEnabled() != switchTheme.isChecked();
+                    boolean languageChanged = !settingsManager.getLanguage().equals(
+                            switchLanguage.isChecked() ? SettingsManager.LANG_EN : SettingsManager.LANG_VI);
+
+                    Log.d(TAG, "Theme changed: " + themeChanged + ", current: " + settingsManager.isDarkThemeEnabled() + ", new: " + switchTheme.isChecked());
+                    Log.d(TAG, "Language changed: " + languageChanged + ", current: " + settingsManager.getLanguage() + ", new: " + (switchLanguage.isChecked() ? SettingsManager.LANG_EN : SettingsManager.LANG_VI));
+
+                    // Lưu cấu hình
+                    settingsManager.setDarkThemeEnabled(switchTheme.isChecked());
+                    settingsManager.setLanguage(switchLanguage.isChecked() ? SettingsManager.LANG_EN : SettingsManager.LANG_VI);
+                    settingsManager.setThinkingEnabled(switchThinking.isChecked());
+
+                    // Áp dụng theme nếu thay đổi
+                    if (themeChanged) {
+                        applyTheme();
+                    }
+
+                    // Áp dụng ngôn ngữ nếu thay đổi
+                    if (languageChanged) {
+                        applyLanguage();
+                    }
+
+                    Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton(getString(R.string.settings_cancel), null)
+                .create();
+
+        dialog.show();
+    }
+
+    private void handleLogout() {
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.logout_title))
+                .setMessage(getString(R.string.logout_message))
+                .setPositiveButton(getString(R.string.logout_confirm), (d, which) -> {
+                    // Sign out Google
+                    if (googleSignInClient != null) {
+                        googleSignInClient.signOut().addOnCompleteListener(this, task -> {
+                            // Reset ve Guest
+                            currentUser = sessionManager.createGuestSession();
+                            updateUserButton();
+                            loadUserSessions();
+                            Toast.makeText(this, getString(R.string.logout_success), Toast.LENGTH_SHORT).show();
+                        });
+                    }
+                })
+                .setNegativeButton(getString(R.string.delete_cancel), null)
+                .show();
+    }
+
+    private void applyTheme() {
+        // Áp dụng theme mới
+        int nightMode = settingsManager.isDarkThemeEnabled() ?
+                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES :
+                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO;
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode);
+        Log.d(TAG, "Applied theme: " + (nightMode == androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES ? "dark" : "light"));
+
+        // Recreate activity để áp dụng theme
+        recreate();
+    }
+
+    private void applyLanguage() {
+        // Áp dụng ngôn ngữ mới
+        String language = settingsManager.getLanguage();
+        java.util.Locale locale = new java.util.Locale(language);
+        java.util.Locale.setDefault(locale);
+
+        android.content.res.Configuration config = new android.content.res.Configuration();
+        config.setLocale(locale);
+        getResources().updateConfiguration(config, getResources().getDisplayMetrics());
+        Log.d(TAG, "Applied language: " + language);
+
+        // Recreate activity để áp dụng ngôn ngữ
+        recreate();
     }
 
     private void updateUserButton() {
@@ -704,9 +853,9 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         input.setText(session.title);
 
         new AlertDialog.Builder(this)
-                .setTitle("Đổi tên cuộc trò chuyện")
+                .setTitle(getString(R.string.rename_title))
                 .setView(input)
-                .setPositiveButton("Lưu", (dialog, which) -> {
+                .setPositiveButton(getString(R.string.rename_save), (dialog, which) -> {
                     String newTitle = input.getText().toString().trim();
                     if (!newTitle.isEmpty()) {
                         executor.execute(() -> {
@@ -719,7 +868,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                         });
                     }
                 })
-                .setNegativeButton("Hủy", null)
+                .setNegativeButton(getString(R.string.rename_cancel), null)
                 .show();
     }
 
@@ -741,7 +890,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             if (count <= 1) {
                     mainHandler.post(() ->
                             Toast.makeText(this,
-                                "Phải luôn có ít nhất 1 cuộc trò chuyện.",
+                                getString(R.string.min_sessions_message),
                                     Toast.LENGTH_LONG).show()
                     );
                     return;
@@ -749,9 +898,9 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
             mainHandler.post(() -> {
                 new AlertDialog.Builder(this)
-                        .setTitle("Xóa cuộc trò chuyện")
-                        .setMessage("Bạn có chắc muốn xóa cuộc trò chuyện này không?")
-                        .setPositiveButton("Xóa", (dialog, which) -> {
+                        .setTitle(getString(R.string.delete_title))
+                        .setMessage(getString(R.string.delete_message))
+                        .setPositiveButton(getString(R.string.delete_confirm), (dialog, which) -> {
                             executor.execute(() -> {
                                 database.chatMessageDao().deleteMessagesBySession(session.session_id);
                                 database.sessionDao().deleteSessionById(session.session_id);
@@ -786,9 +935,9 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                                     chatAdapter.notifyDataSetChanged();
                                     updateEmptyStateUi();
                                 });
-                            });
-                        })
-                        .setNegativeButton("Hủy", null)
+                        });
+                })
+                .setNegativeButton(getString(R.string.logout_cancel), null)
                         .show();
             });
         });
@@ -852,7 +1001,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         ChatMessage welcomeMessage = new ChatMessage(
                 UUID.randomUUID().toString(),
                 currentSessionId,
-                "Xin chào! Tôi là Loco AI, một trợ lý ảo chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi biết bạn cần tìm gì nhé.",
+                getString(R.string.welcome_message),
                 null,
                 ChatMessage.TYPE_AI,
                 System.currentTimeMillis()
@@ -935,15 +1084,17 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         if (firebaseUser == null) return;
 
         java.util.Map<String, Object> sessionData = new java.util.HashMap<>();
-        sessionData.put("sessionId", session.session_id);
         sessionData.put("userId", firebaseUser.getUid());
         sessionData.put("title", session.title);
         sessionData.put("previewMessage", session.preview_message);
-        sessionData.put("lastUpdated", session.last_updated);
+        sessionData.put("updatedAt", session.last_updated);
         sessionData.put("isPinned", session.isPinned);
 
-        firestore.collection("sessions").document(session.session_id)
-                .set(sessionData, SetOptions.merge());
+        firestore.collection("users").document(firebaseUser.getUid())
+                .collection("sessions").document(session.session_id)
+                .set(sessionData, SetOptions.merge())
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "Synced session to Firestore: " + session.session_id))
+                .addOnFailureListener(e -> Log.e(TAG, "Failed to sync session", e));
     }
 
     private void syncMessageToFirestore(String sessionId, ChatMessage message) {
@@ -951,15 +1102,53 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         if (firebaseUser == null) return;
 
         java.util.Map<String, Object> messageData = new java.util.HashMap<>();
-        messageData.put("messageId", message.message_id);
-        messageData.put("message", message.message);
+        messageData.put("role", message.role);
+        messageData.put("content", message.content);
         messageData.put("metadata", message.metadata);
-        messageData.put("type", message.type);
-        messageData.put("timestamp", message.timestamp);
+        messageData.put("createdAt", message.createdAt);
+        messageData.put("updatedAt", message.updatedAt);
+        messageData.put("status", message.status);
+        messageData.put("deviceId", message.deviceId);
 
-        firestore.collection("sessions").document(sessionId)
+        firestore.collection("users").document(firebaseUser.getUid())
+                .collection("sessions").document(sessionId)
                 .collection("messages").document(message.message_id)
-                .set(messageData, SetOptions.merge());
+                .set(messageData, SetOptions.merge())
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "Synced message to Firestore: " + message.message_id))
+                .addOnFailureListener(e -> Log.e(TAG, "Failed to sync message", e));
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Attach Firebase listeners when activity becomes visible
+        // // quản lý lifecycle
+        attachFirebaseListenersIfNeeded();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Ensure listeners are attached when activity resumes
+        attachFirebaseListenersIfNeeded();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Detach Firebase listeners when activity is not visible
+        // // detach listeners ở onStop/onDestroy để tránh memory leak
+    }
+
+    /**
+     * Attach Firebase listeners nếu user đã login và chưa attach
+     */
+    private void attachFirebaseListenersIfNeeded() {
+        if (currentUser != null && !currentUser.isGuest && mAuth.getCurrentUser() != null) {
+            String uid = mAuth.getCurrentUser().getUid();
+            Log.d(TAG, "Attaching Firebase listeners for user: " + uid);
+            // syncHelper.attachListeners(uid); // Disabled for now
+        }
     }
 
     @Override

@@ -9,7 +9,7 @@ import org.json.JSONObject;
 
 import java.util.UUID;
 
-// Singleton quan ly user hien tai, luu trong SharedPreferences
+// Singleton quản lý user hiện tại, lưu trong SharedPreferences
 public class SessionManager {
 
     private static final String TAG = "SessionManager";
@@ -33,7 +33,7 @@ public class SessionManager {
         return instance;
     }
 
-    // Lay user hien tai, neu chua co thi tao guest
+    // Lấy user hiện tại, nếu chưa có thì tạo guest
     public UserSession getCurrentUser() {
         if (currentUser == null) {
             loadFromPrefs();
@@ -45,13 +45,13 @@ public class SessionManager {
         return currentUser;
     }
 
-    // Set user moi (sau khi login Google)
+    // Set user mới (sau khi đăng nhập Google)
     public void setCurrentUser(UserSession user) {
         this.currentUser = user;
         saveToPrefs();
     }
 
-    // Tao lai user guest (sau khi dang xuat)
+    // Tạo lại user guest (sau khi đăng xuất)
     public UserSession createGuestSession() {
         currentUser = createGuestSessionInternal();
         saveToPrefs();

@@ -1,0 +1,66 @@
+<resources>
+    <!-- App -->
+    <string name="app_name">Loco AI</string>
+
+    <!-- Main Activity -->
+    <string name="chat_placeholder">Ask something about places...</string>
+    <string name="new_conversation">New conversation</string>
+    <string name="recent_conversations">Recent conversations</string>
+    <string name="view_places">View places</string>
+    <string name="send_message">Send</string>
+    <string name="menu_button">Menu</string>
+    <string name="user_button">User</string>
+
+    <!-- Dialogs -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_vi">VI</string>
+    <string name="settings_language_en">EN</string>
+    <string name="settings_ai_thinking">AI Thinking</string>
+    <string name="settings_ai_thinking_off">Off</string>
+    <string name="settings_ai_thinking_on">On</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_cancel">Cancel</string>
+
+    <string name="logout_title">Logout</string>
+    <string name="logout_message">Are you sure you want to logout?</string>
+    <string name="logout_confirm">Logout</string>
+    <string name="logout_cancel">Cancel</string>
+
+    <string name="rename_title">Rename conversation</string>
+    <string name="rename_save">Save</string>
+    <string name="rename_cancel">Cancel</string>
+
+    <string name="delete_title">Delete conversation</string>
+    <string name="delete_message">Are you sure you want to delete this conversation?</string>
+    <string name="delete_confirm">Delete</string>
+    <string name="delete_cancel">Cancel</string>
+
+    <string name="guest_limit_title">Limit reached</string>
+    <string name="guest_limit_message">Guests can only ask up to 5 questions. Please login to continue using.</string>
+    <string name="guest_limit_login">Login with Google</string>
+
+    <!-- Messages -->
+    <string name="welcome_message">Hello! I am Loco AI, a virtual assistant specializing in answering questions about places. Let me know what you need to find.</string>
+    <string name="error_message">Error connecting to AI. Please try again.</string>
+    <string name="location_permission_message">This question requires location, please grant permission...</string>
+    <string name="location_denied_message">No location access permission, some questions will not work.</string>
+    <string name="min_sessions_message">There must always be at least 1 conversation.</string>
+    <string name="settings_saved">Settings saved</string>
+    <string name="logout_success">Logged out</string>
+    <string name="login_success">Login successful!</string>
+    <string name="login_welcome">Hello %s</string>
+
+    <!-- Toolbar -->
+    <string name="toolbar_title">Loco AI</string>
+    <string name="toolbar_menu_desc">Menu</string>
+    <string name="toolbar_user_desc">User</string>
+
+    <!-- Error messages -->
+    <string name="google_account_error">Could not get Google account information</string>
+    <string name="firebase_login_error">Firebase login failed</string>
+    <string name="google_login_error">Google login failed</string>
+</resources>

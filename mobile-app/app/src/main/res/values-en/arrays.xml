@@ -1,0 +1,9 @@
+<resources>
+    <string-array name="suggestion_questions">
+        <item>Directions from A to B</item>
+        <item>Find restaurants nearby</item>
+        <item>Popular tourist destinations</item>
+        <item>Find nearest gas station</item>
+        <item>Directions to hospital</item>
+    </string-array>
+</resources>

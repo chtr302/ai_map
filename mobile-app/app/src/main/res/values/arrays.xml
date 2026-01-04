@@ -1,0 +1,9 @@
+<resources>
+    <string-array name="suggestion_questions">
+        <item>Hướng dẫn đi từ A đến B</item>
+        <item>Tìm quán ăn gần đây</item>
+        <item>Địa điểm du lịch nổi tiếng</item>
+        <item>Tìm trạm xăng gần nhất</item>
+        <item>Đường đến bệnh viện</item>
+    </string-array>
+</resources>

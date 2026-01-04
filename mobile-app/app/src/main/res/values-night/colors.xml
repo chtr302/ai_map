@@ -1,0 +1,21 @@
+<resources>
+    <!-- NỀN & SURFACE - Dark mode -->
+    <color name="colorPrimary">#2ECC71</color>
+    <color name="windowBackground">#121212</color>
+    <color name="cardBackground">#1E1E1E</color>
+    <color name="surfaceInput">#2A2A2A</color>
+    <color name="aiBubbleBackground">#2D2D2D</color>
+    <color name="userBubbleBackground">#2ECC71</color>
+
+    <!-- TEXT & ICON - Dark mode -->
+    <color name="colorAccent">#FFFFFF</color>
+    <color name="textSecondary">#B3B3B3</color>
+    <color name="textBlueGlow">#2ECC71</color>
+    <color name="iconColor">#FFFFFF</color>
+    <color name="chatMessageTextColor">#FFFFFF</color>
+
+    <!-- ACCENT KHÁC - Dark mode -->
+    <color name="directionButton">#2ECC71</color>
+    <color name="directionButtonText">#FFFFFF</color>
+    <color name="buttonRipple">#332ECC71</color>
+</resources>

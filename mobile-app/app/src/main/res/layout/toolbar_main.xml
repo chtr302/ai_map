@@ -19,7 +19,7 @@
             android:layout_alignParentStart="true"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_menu"
-            android:contentDescription="Menu" />
+            android:contentDescription="@string/toolbar_menu_desc" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -45,7 +45,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Loco AI"
+                android:text="@string/toolbar_title"
                 android:textColor="@color/colorAccent"
                 android:textSize="20sp"
                 android:textStyle="bold" />
@@ -62,7 +62,7 @@
             android:src="@drawable/ic_avatar"
             android:padding="10dp"
             android:scaleType="centerInside"
-            android:contentDescription="User" />
+            android:contentDescription="@string/toolbar_user_desc" />
 
     </RelativeLayout>
 

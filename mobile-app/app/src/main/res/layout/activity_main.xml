@@ -34,7 +34,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:text="Loco AI"
+                android:text="@string/app_name"
                 android:textColor="@color/textBlueGlow"
                 android:textSize="34sp"
                 android:textStyle="bold"
@@ -83,7 +83,7 @@
                         android:layout_weight="1"
                         android:layout_height="wrap_content"
                         android:minHeight="48dp"
-                        android:hint="Nhập câu hỏi cho Loco ở đây nhé ..."
+                        android:hint="@string/chat_placeholder"
                         android:textColor="@color/colorAccent"
                         android:textSize="16sp"
                         android:background="@android:color/transparent"
@@ -100,8 +100,8 @@
                         android:layout_height="48dp"
                         android:backgroundTint="@color/userBubbleBackground"
                         android:src="@drawable/ic_send"
-                        android:tint="@color/colorAccent"
-                        android:contentDescription="Gửi"/>
+                        app:tint="@color/colorAccent"
+                        android:contentDescription="@string/send_message"/>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
         </FrameLayout>
@@ -141,7 +141,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Loco AI"
+                android:text="@string/app_name"
                 android:textColor="@color/colorAccent"
                 android:textSize="22sp"
                 android:textStyle="bold"/>
@@ -157,7 +157,7 @@
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Cuộc trò chuyện mới"
+            android:text="@string/new_conversation"
             android:textColor="@color/colorAccent"
             app:icon="@android:drawable/ic_input_add"
             app:iconTint="@color/colorAccent"
@@ -173,7 +173,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Cuộc trò chuyện gần đây"
+            android:text="@string/recent_conversations"
             android:textColor="@color/textSecondary"
             android:textSize="16sp"
             android:padding="16dp"/>
