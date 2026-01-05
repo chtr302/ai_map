@@ -45,10 +45,10 @@
 
     <!-- Messages -->
     <string name="welcome_message">Xin chào! Tôi là Loco AI, một trợ lý ảo chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi biết bạn cần tìm gì nhé.</string>
-    <string name="error_message">Có lỗi khi kết nối với AI. Vui lòng thử lại.</string>
+    <string name="error_message">Server AI hiện tại đang có lỗi, đợi 1 chút rồi Hậu sẽ xử lý vấn đề này rồi bạn sẽ tương tác với Loco được nhé.</string>
     <string name="location_permission_message">Câu hỏi này cần vị trí, vui lòng cấp quyền...</string>
     <string name="location_denied_message">Không có quyền truy cập vị trí, một số câu hỏi sẽ không hoạt động.</string>
-    <string name="min_sessions_message">Phải luôn có ít nhất 1 cuộc trò chuyện.</string>
+    <string name="min_sessions_message">Đây là cuộc trò chuyện còn lại duy nhất của chúng ta, bạn không thể xóa nó như vậy được.</string>
     <string name="settings_saved">Đã lưu cài đặt</string>
     <string name="logout_success">Đã đăng xuất</string>
     <string name="login_success">Đăng nhập thành công!</string>
@@ -63,4 +63,13 @@
     <string name="google_account_error">Không lấy được thông tin tài khoản Google</string>
     <string name="firebase_login_error">Đăng nhập Firebase thất bại</string>
     <string name="google_login_error">Đăng nhập Google thất bại</string>
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+
+    <!-- Settings Extensions -->
+    <string name="theme_dark">Giao diện tối (Dark Mode)</string>
+    <string name="language_english">Tiếng Anh (English)</string>
+
+    <!-- Menu Extensions -->
+    <string name="menu_settings">Cài đặt</string>
+    <string name="menu_logout">Đăng xuất</string>
 </resources>

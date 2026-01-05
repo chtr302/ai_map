@@ -1,9 +1,14 @@
 <resources>
     <string-array name="suggestion_questions">
-        <item>Hướng dẫn đi từ A đến B</item>
-        <item>Tìm quán ăn gần đây</item>
-        <item>Địa điểm du lịch nổi tiếng</item>
-        <item>Tìm trạm xăng gần nhất</item>
-        <item>Đường đến bệnh viện</item>
+        <item>Tìm quán cà phê đẹp để làm việc ở Quận 1</item>
+        <item>Có quán bún bò nào ngon quanh đây không?</item>
+        <item>Chỉ đường đến trạm xăng gần nhất</item>
+        <item>Gợi ý địa điểm đi chơi cuối tuần ở Sài Gòn</item>
+        <item>Tìm nhà hàng chay ngon rẻ</item>
+        <item>Khách sạn nào tốt gần sân bay Tân Sơn Nhất?</item>
+        <item>Tìm tiệm sửa xe máy gần đây</item>
+        <item>Quán ăn gia đình ấm cúng ở Hà Nội</item>
+        <item>Rạp chiếu phim gần nhất ở đâu?</item>
+        <item>Tìm công viên có chỗ chạy bộ thoáng mát</item>
     </string-array>
 </resources>
