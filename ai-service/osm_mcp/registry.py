@@ -49,7 +49,7 @@ def setup_tools(app: Server):
             ),
             Tool(
                 name="find_places_by_tags",
-                description="Tìm các địa điểm trong một bán kính nhất định xung quanh một tọa độ, dựa trên một bộ các thẻ (tags) của OpenStreetMap. Ví dụ: để tìm quán ăn Hàn Quốc, tags có thể là {\"amenity\": \"restaurant\", \"cuisine\": \"korean\"}.",
+                description="Tìm các địa điểm trong một bán kính nhất định xung quanh một tọa độ, dựa trên một từ khóa hoặc chuỗi mô tả (tags). Ví dụ: 'quán ăn Hàn Quốc', 'cafe', 'trường học'.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -66,8 +66,8 @@ def setup_tools(app: Server):
                             "description": "Bán kính tìm kiếm tính bằng mét."
                         },
                         "tags": {
-                            "type": "object",
-                            "description": "Một dictionary chứa các cặp key-value của OpenStreetMap tags để lọc địa điểm. Ví dụ: {\"amenity\": \"restaurant\", \"cuisine\": \"korean\"}"
+                            "type": "string",
+                            "description": "Một từ khóa hoặc chuỗi mô tả các tags của địa điểm cần tìm. Ví dụ: 'quán ăn Hàn Quốc', 'cafe', 'trường học'."
                         }
                     },
                     "required": ["lat", "lon", "radius", "tags"]
@@ -94,7 +94,7 @@ def setup_tools(app: Server):
             ),
             Tool(
                 name="local_search",
-                description="Tìm kiếm các địa điểm cụ thể (quán ăn, cửa hàng, điểm quan tâm) bằng Brave Search. Có thể cung cấp thông tin như địa chỉ, rating, giờ mở cửa. Dùng tool này khi cần tìm thông tin địa điểm có cấu trúc.",
+                description="Tìm kiếm các địa điểm cụ thể (quán ăn, cửa hàng, điểm quan tâm) bằng Brave Search. Có thể cung cấp thông tin như địa chỉ, rating, giờ mở cửa. Dùng tool này khi cần tìm thông tin địa điểm có cấu trúc. Tham số 'country' mặc định là 'ALL' vì Brave Search không hỗ trợ tìm kiếm theo quốc gia 'VN'. Luôn ưu tiên dùng tool này để tìm kiếm quán ăn, cửa hàng, và các địa điểm có review/rating.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -108,7 +108,7 @@ def setup_tools(app: Server):
                         },
                         "country": {
                             "type": "string",
-                            "description": "Mã quốc gia (ví dụ: 'VN'). Mặc định là 'VN'."
+                            "description": "Mã quốc gia (ví dụ: 'US', 'GB', 'ALL'). Mặc định là 'ALL'. Brave Search không hỗ trợ 'VN' nên sẽ tự động chuyển thành 'ALL'."
                         },
                         "search_lang": {
                             "type": "string",

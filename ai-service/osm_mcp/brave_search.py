@@ -89,12 +89,21 @@ class BraveSearchTools:
         Args:
             query (str): Tên hoặc mô tả địa điểm cần tìm.
             count (int): Số lượng kết quả muốn lấy (tối đa 20).
-            country (str): Mã quốc gia (ví dụ: "VN" cho Việt Nam).
+            country (str): Mã quốc gia. Brave hỗ trợ giới hạn các mã. Nếu là VN sẽ chuyển thành ALL.
             search_lang (str): Ngôn ngữ tìm kiếm (ví dụ: "vi" cho tiếng Việt).
 
         Returns:
             list: Danh sách các địa điểm tìm thấy (tên, địa chỉ, rating, giờ mở cửa, URL...).
         """
+        SUPPORTED_COUNTRIES = {
+            'AR', 'AU', 'AT', 'BE', 'BR', 'CA', 'CL', 'DK', 'FI', 'FR', 'DE', 'GR', 'HK', 'IN', 'ID', 
+            'IT', 'JP', 'KR', 'MY', 'MX', 'NL', 'NZ', 'NO', 'CN', 'PL', 'PT', 'PH', 'RU', 'SA', 'ZA', 
+            'ES', 'SE', 'CH', 'TW', 'TR', 'GB', 'US', 'ALL'
+        }
+        
+        if country.upper() not in SUPPORTED_COUNTRIES:
+            country = "ALL"
+
         params = {
             "q": query,
             "count": min(count, 20),
