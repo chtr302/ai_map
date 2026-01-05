@@ -3,15 +3,11 @@ package com.example.aimap.data;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-// Quản lý cấu hình ứng dụng
 public class SettingsManager {
     private static final String PREF_NAME = "app_settings";
-    private static final String KEY_THEME = "theme_mode";
+    private static final String KEY_DARK_THEME = "dark_theme";
     private static final String KEY_LANGUAGE = "language";
-    private static final String KEY_THINKING = "ai_thinking_enabled";
-
-    public static final String THEME_LIGHT = "light";
-    public static final String THEME_DARK = "dark";
+    private static final String KEY_THINKING = "thinking_enabled";
 
     public static final String LANG_VI = "vi";
     public static final String LANG_EN = "en";
@@ -20,8 +16,7 @@ public class SettingsManager {
     private final SharedPreferences prefs;
 
     private SettingsManager(Context context) {
-        this.prefs = context.getApplicationContext()
-                .getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        prefs = context.getApplicationContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     }
 
     public static synchronized SettingsManager getInstance(Context context) {
@@ -31,16 +26,14 @@ public class SettingsManager {
         return instance;
     }
 
-    // Theme
     public boolean isDarkThemeEnabled() {
-        return THEME_DARK.equals(prefs.getString(KEY_THEME, THEME_LIGHT));
+        return prefs.getBoolean(KEY_DARK_THEME, false); // Mặc định là Light theme
     }
 
     public void setDarkThemeEnabled(boolean enabled) {
-        prefs.edit().putString(KEY_THEME, enabled ? THEME_DARK : THEME_LIGHT).apply();
+        prefs.edit().putBoolean(KEY_DARK_THEME, enabled).apply();
     }
 
-    // Language
     public String getLanguage() {
         return prefs.getString(KEY_LANGUAGE, LANG_VI);
     }
@@ -49,9 +42,8 @@ public class SettingsManager {
         prefs.edit().putString(KEY_LANGUAGE, language).apply();
     }
 
-    // AI Thinking
     public boolean isThinkingEnabled() {
-        return prefs.getBoolean(KEY_THINKING, false);
+        return prefs.getBoolean(KEY_THINKING, true);
     }
 
     public void setThinkingEnabled(boolean enabled) {

@@ -18,12 +18,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.noties.markwon.Markwon;
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
+import io.noties.markwon.ext.tables.TablePlugin;
 
 public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private ArrayList<ChatMessage> messages;
     private Markwon markwon;
     private OnPlacesButtonClickListener listener;
-    private Map<String, Spanned> markdownCache = new HashMap<>(); // Cache markdown
+    private Map<String, Spanned> markdownCache = new HashMap<>();
 
     public interface OnPlacesButtonClickListener {
         void onPlacesButtonClick(String jsonMetadata);
@@ -31,7 +33,10 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     public ChatAdapter(Context context, ArrayList<ChatMessage> messages, OnPlacesButtonClickListener listener) {
         this.messages = messages;
-        this.markwon = Markwon.create(context);
+        this.markwon = Markwon.builder(context)
+                .usePlugin(TablePlugin.create(context))
+                .usePlugin(StrikethroughPlugin.create())
+                .build();
         this.listener = listener;
     }
 
@@ -58,11 +63,83 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         ChatMessage msg = messages.get(position);
         if (holder instanceof UserViewHolder) {
-             renderAndSetText(((UserViewHolder) holder).tvMessage, msg);
+             renderAndSetText(((UserViewHolder) holder).tvMessage, msg.getMessage());
         } else if (holder instanceof AIViewHolder) {
             AIViewHolder aiHolder = (AIViewHolder) holder;
-            renderAndSetText(aiHolder.tvMessage, msg);
-            bindButtonState(aiHolder, msg); // Cập nhật trạng thái nút
+            
+            String fullMessage = msg.getMessage();
+            if (fullMessage == null) fullMessage = "";
+
+            // --- SILENT THINKING LOGIC ---
+            String answerContent = "";
+            boolean isThinking = false;
+
+            // Xử lý Placeholder "<think>" từ MainActivity
+            if (fullMessage.equals("<think>")) {
+                isThinking = true;
+                answerContent = "";
+            } else {
+                int tO = fullMessage.indexOf("<think>");
+                int tC = fullMessage.indexOf("</think>");
+                int sep = fullMessage.indexOf("|||");
+
+                if (tO != -1) {
+                    if (tC != -1) {
+                        isThinking = false;
+                        int endOfThink = tC + 8;
+                        if (sep != -1 && sep > endOfThink) {
+                            answerContent = fullMessage.substring(endOfThink, sep).trim();
+                        } else {
+                            answerContent = fullMessage.substring(endOfThink).trim();
+                        }
+                    } else {
+                        // Đang suy nghĩ
+                        if (sep != -1) {
+                            isThinking = false;
+                            answerContent = ""; 
+                        } else {
+                            isThinking = true;
+                            answerContent = ""; 
+                        }
+                    }
+                } else {
+                    isThinking = false;
+                    if (sep != -1) {
+                        answerContent = fullMessage.substring(0, sep).trim();
+                    } else {
+                        answerContent = fullMessage;
+                    }
+                }
+            }
+
+            // Hiển thị thanh trạng thái "Đang suy nghĩ"
+            aiHolder.layoutThinkingStatus.setVisibility(isThinking ? View.VISIBLE : View.GONE);
+
+            // Hiển thị câu trả lời chính
+            if (!answerContent.isEmpty()) {
+                aiHolder.tvMessage.setVisibility(View.VISIBLE);
+                renderAndSetText(aiHolder.tvMessage, answerContent);
+            } else {
+                // Fallback: Xong rồi mà không có text (chỉ có JSON)
+                if (!isThinking && msg.metadata != null && !msg.metadata.isEmpty() && !msg.metadata.equals("[]")) {
+                    aiHolder.tvMessage.setVisibility(View.VISIBLE);
+                    renderAndSetText(aiHolder.tvMessage, "Đã tìm thấy địa điểm:");
+                } else {
+                    aiHolder.tvMessage.setVisibility(View.GONE);
+                }
+            }
+            
+            // Xử lý nút địa điểm
+            if (msg.metadata != null && !msg.metadata.isEmpty() && !msg.metadata.equals("[]")) {
+                aiHolder.btnViewPlaces.setVisibility(View.VISIBLE);
+                aiHolder.btnViewPlaces.setOnClickListener(v -> {
+                    if (listener != null) {
+                        listener.onPlacesButtonClick(msg.metadata);
+                    }
+                });
+            } else {
+                aiHolder.btnViewPlaces.setVisibility(View.GONE);
+            }
         }
     }
 
@@ -70,43 +147,24 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position, @NonNull java.util.List<Object> payloads) {
         if (!payloads.isEmpty()) {
             for (Object payload : payloads) {
-                if ("UPDATE_BUTTON".equals(payload)) {
+                if ("STREAMING_UPDATE".equals(payload)) {
                     if (holder instanceof AIViewHolder) {
-                        bindButtonState((AIViewHolder) holder, messages.get(position));
+                        onBindViewHolder(holder, position); 
                     }
-                    return; // Đã xử lý xong partial update cho nút
-                } else if ("STREAMING_UPDATE".equals(payload)) {
-                    // Chỉ update TEXT, không đụng vào Button hay các view khác
-                    if (holder instanceof AIViewHolder) {
-                        renderAndSetText(((AIViewHolder) holder).tvMessage, messages.get(position));
-                    }
-                    return; // Đã xử lý xong partial update cho streaming text
+                    return; 
                 }
             }
         }
-        // Nếu không có payload hoặc payload lạ, gọi bind đầy đủ
         super.onBindViewHolder(holder, position, payloads);
     }
 
-    private void bindButtonState(AIViewHolder aiHolder, ChatMessage msg) {
-        if (msg.metadata != null && !msg.metadata.isEmpty()) {
-            aiHolder.btnViewPlaces.setVisibility(View.VISIBLE);
-            aiHolder.btnViewPlaces.setOnClickListener(v -> {
-                if (listener != null) {
-                    listener.onPlacesButtonClick(msg.metadata);
-                }
-            });
-        } else {
-            aiHolder.btnViewPlaces.setVisibility(View.GONE);
-            aiHolder.btnViewPlaces.setOnClickListener(null);
-        }
-    }
-    
-    private void renderAndSetText(TextView textView, ChatMessage msg) {
-        Spanned cached = markdownCache.get(msg.message_id);
+    private void renderAndSetText(TextView textView, String text) {
+        if (text == null || text.trim().isEmpty()) return;
+        String cacheKey = String.valueOf(text.hashCode());
+        Spanned cached = markdownCache.get(cacheKey);
         if (cached == null) {
-            cached = markwon.toMarkdown(msg.getMessage());
-            markdownCache.put(msg.message_id, cached);
+            cached = markwon.toMarkdown(text);
+            markdownCache.put(cacheKey, cached);
         }
         markwon.setParsedMarkdown(textView, cached);
     }
@@ -115,33 +173,13 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     public int getItemCount() {
         return messages.size();
     }
-
-    public void addMessage(ChatMessage message){
-        messages.add(message);
-        // Xóa cache để đảm bảo nó được render mới khi add
-        // Không, cái này chỉ nên xóa khi message cũ bị thay đổi.
-        // Khi add mới, nó chưa có trong cache nên không cần xóa.
-        notifyItemInserted(messages.size() - 1);
-    }
     
-    // Phương thức mới để cập nhật message đang streaming
     public void updateStreamingMessage(int position) {
         if (position >= 0 && position < messages.size()) {
-            // Xóa cache của message này vì nội dung text đã thay đổi
-            markdownCache.remove(messages.get(position).message_id);
-            // Gọi notify với payload để chỉ cập nhật text
             notifyItemChanged(position, "STREAMING_UPDATE");
         }
     }
     
-    public void clearMessages() {
-        int size = messages.size();
-        messages.clear();
-        markdownCache.clear();
-        notifyItemRangeRemoved(0, size);
-    }
-    
-    // ... ViewHolder classes
     static class UserViewHolder extends RecyclerView.ViewHolder {
         TextView tvMessage;
         UserViewHolder(View itemView) {
@@ -153,11 +191,13 @@ public class ChatAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     static class AIViewHolder extends RecyclerView.ViewHolder {
         TextView tvMessage;
         MaterialButton btnViewPlaces;
+        View layoutThinkingStatus;
 
         AIViewHolder(View itemView) {
             super(itemView);
             tvMessage = itemView.findViewById(R.id.tvMessage);
             btnViewPlaces = itemView.findViewById(R.id.btnViewPlaces);
+            layoutThinkingStatus = itemView.findViewById(R.id.layoutThinkingStatus);
         }
     }
 }

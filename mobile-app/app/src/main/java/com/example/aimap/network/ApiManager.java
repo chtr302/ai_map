@@ -36,8 +36,8 @@ public class ApiManager {
 
     public ApiManager() {
         this.client = new OkHttpClient.Builder()
-                .connectTimeout(60, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
+                .connectTimeout(120, TimeUnit.SECONDS)
+                .readTimeout(600, TimeUnit.SECONDS)
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .build();
     }
@@ -68,31 +68,29 @@ public class ApiManager {
         return str.substring(i);
     }
 
-    public void sendMessage(String currentSessionId, String userInput, String systemPrompt, List<ChatMessage> history, StreamCallback callback) {
+    public void sendMessage(String modelName, String currentSessionId, String userInput, String systemPrompt, List<ChatMessage> history, StreamCallback callback) {
         this.inThinkBlock = false;
         new Thread(() -> {
             try {
                 Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("model", "qwen3:8b");
-                requestBody.put("temperature", 0.7);
-                requestBody.put("max_tokens", 1500); // Tăng lên 1500
+                requestBody.put("model", modelName);
+                requestBody.put("temperature", 0.1);
+                requestBody.put("max_tokens", 2048); 
                 List<Map<String, String>> messages = new ArrayList<>();
                 
                 // 1. System Prompt
                 Map<String, String> systemMessage = new HashMap<>();
                 systemMessage.put("role", "system");
-                systemMessage.put("content", systemPrompt + " /no_think"); 
+                systemMessage.put("content", systemPrompt); 
                 messages.add(systemMessage);
 
                 // 2. Chat History
                 if (history != null && !history.isEmpty()) {
                     for (ChatMessage msg : history) {
                         Map<String, String> histMsg = new HashMap<>();
-                        // Map local types to API roles
                         String role = (msg.type == ChatMessage.TYPE_USER) ? "user" : "assistant";
                         histMsg.put("role", role);
-                        
-                        // Ensure only the text part is sent as content for history
+
                         String messageContent = msg.message;
                         if (messageContent != null && messageContent.contains("|||")) {
                             messageContent = messageContent.split("\\|\\|\\|")[0].trim();
@@ -102,7 +100,6 @@ public class ApiManager {
                     }
                 }
 
-                // 3. Current User Input
                 Map<String, String> userMessage = new HashMap<>();
                 userMessage.put("role", "user");
                 userMessage.put("content", userInput);
@@ -153,33 +150,9 @@ public class ApiManager {
                                         String content = extractContentFromStreamData(jsonData);
                                         if (content == null) continue;
 
-                                        StringBuilder chunkOutput = new StringBuilder();
-                                        int currentPos = 0;
-                                        while (currentPos < content.length()) {
-                                            if (inThinkBlock) {
-                                                int endTag = content.indexOf("</think>", currentPos);
-                                                if (endTag != -1) {
-                                                    inThinkBlock = false;
-                                                    currentPos = endTag + "</think>".length();
-                                                } else {
-                                                    currentPos = content.length();
-                                                }
-                                            } else {
-                                                int startTag = content.indexOf("<think>", currentPos);
-                                                if (startTag != -1) {
-                                                    chunkOutput.append(content.substring(currentPos, startTag));
-                                                    inThinkBlock = true;
-                                                    currentPos = startTag + "<think>".length();
-                                                } else {
-                                                    chunkOutput.append(content.substring(currentPos));
-                                                    currentPos = content.length();
-                                                }
-                                            }
-                                        }
-
-                                        String partToSend = chunkOutput.toString();
-                                        if (!partToSend.isEmpty()) {
-                                            partToSend = partToSend.replaceAll("\\*\\*", "");
+                                        String partToSend = content;
+                                        
+                                        if (partToSend != null && !partToSend.isEmpty()) {
 
                                             if (isFirstVisibleChunk) {
                                                 partToSend = trimLeadingWhitespace(partToSend);
@@ -215,7 +188,6 @@ public class ApiManager {
                 JSONObject message = choice.getJSONObject("message");
                 String content = message.getString("content");
                 if (content != null) {
-                    content = content.replaceAll("(?s)<think>.*?</think>\\s*", "");
                     content = content.replaceAll("\\*\\*", "");
                 }
                 return content;

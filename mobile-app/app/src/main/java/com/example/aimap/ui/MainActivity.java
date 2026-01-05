@@ -4,8 +4,6 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -60,9 +58,6 @@ import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.SetOptions;
 
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -76,10 +71,15 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     private static final String TAG = "MainActivity";
     private static final int MAX_GUEST_QUESTIONS = 5;
 
+    // SỬ DỤNG MODEL 8B THINKING
+    private static final String MODEL_NAME = "qwen/qwen3-8b"; 
+
     private EditText editTextMessage;
     private RecyclerView recyclerViewChat;
     private RecyclerView recyclerViewDrawerSessions;
     private RecyclerView recyclerViewSuggestions;
+    private View layoutEmptyState;
+
     private ChatAdapter chatAdapter;
     private SuggestionAdapter suggestionAdapter;
     private SessionAdapter sessionAdapter;
@@ -110,9 +110,8 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     // UI components
     private DrawerLayout drawerLayout;
     private MaterialButton buttonNewSession;
-    private TextView textViewEmptyChat;
     private ImageButton buttonUser;
-
+    
     // Background
     private ExecutorService executor;
     private Handler mainHandler;
@@ -156,11 +155,11 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         recyclerViewSuggestions = findViewById(R.id.recyclerViewSuggestions);
         recyclerViewDrawerSessions = findViewById(R.id.recyclerViewDrawerSessions);
         ImageButton buttonSend = findViewById(R.id.buttonSend);
-        textViewEmptyChat = findViewById(R.id.textViewEmptyChat);
         buttonNewSession = findViewById(R.id.buttonNewSession);
         ImageButton buttonMenu = findViewById(R.id.buttonMenu);
         buttonUser = findViewById(R.id.buttonUser);
-
+        layoutEmptyState = findViewById(R.id.layoutEmptyState);
+        
         // Setup Google Sign-In
         setupGoogleSignIn();
 
@@ -175,7 +174,6 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             if (currentUser.isGuest) {
                 startGoogleSignIn();
             } else {
-                // Đã login, show menu dropdown
                 showUserMenu(v);
             }
         });
@@ -247,7 +245,6 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             String msg = editTextMessage.getText().toString().trim();
             if (msg.isEmpty()) return;
 
-            // Check gioi han Guest
             if (currentUser.isGuest && currentUser.questionCount >= MAX_GUEST_QUESTIONS) {
                 showGuestLimitDialog();
                 return;
@@ -256,32 +253,23 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
             List<String> locationKeywords = Arrays.asList("gần đây", "ở đây", "xung quanh", "quanh đây");
             boolean requiresLocation = locationKeywords.stream().anyMatch(msg::contains);
 
-            if (requiresLocation &&
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                            != PackageManager.PERMISSION_GRANTED) {
+            if (requiresLocation && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, getString(R.string.location_permission_message), Toast.LENGTH_SHORT).show();
                 requestLocationPermission();
                 return;
             }
 
-            // Tang so cau hoi cua Guest
             if (currentUser.isGuest) {
                 sessionManager.incrementQuestionCount();
-                currentUser = sessionManager.getCurrentUser(); // Refresh
+                currentUser = sessionManager.getCurrentUser();
             }
 
             editTextMessage.setText("");
             isGenerating = true;
             toggleSendingState(true);
+            updateEmptyStateUi(false);
 
-            ChatMessage userMessage = new ChatMessage(
-                    UUID.randomUUID().toString(),
-                    currentSessionId,
-                    msg,
-                    null,
-                    ChatMessage.TYPE_USER,
-                    System.currentTimeMillis()
-            );
+            ChatMessage userMessage = new ChatMessage(UUID.randomUUID().toString(), currentSessionId, msg, null, ChatMessage.TYPE_USER, System.currentTimeMillis());
             addMessageToUI(userMessage);
 
             executor.execute(() -> {
@@ -289,7 +277,6 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 syncMessageToFirestore(currentSessionId, userMessage);
             });
 
-            // Cap nhat session title
             executor.execute(() -> {
                 Session s = database.sessionDao().getSessionById(currentSessionId);
                 if (s != null) {
@@ -301,7 +288,6 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                     s.setLast_updated(System.currentTimeMillis());
                     database.sessionDao().updateSession(s);
                     syncSessionToFirestore(s);
-
                     List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
                     mainHandler.post(() -> sessionAdapter.setSessions(all));
                 }
@@ -309,121 +295,65 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
             String dynamicSystemPrompt = SystemPrompts.DEFAULT_MAP_PROMPT;
             if (lastKnownLocation != null) {
-                dynamicSystemPrompt += String.format(
-                        Locale.US,
-                        "\n# BỐI CẢNH VỊ TRÍ\nVị trí hiện tại của người dùng là (latitude: %f, longitude: %f). Hãy sử dụng thông tin này nếu câu hỏi của họ có liên quan đến 'ở đây', 'gần đây', 'xung quanh đây'.",
-                        lastKnownLocation.getLatitude(),
-                        lastKnownLocation.getLongitude()
-                );
+                dynamicSystemPrompt += String.format(Locale.US, "\n# VỊ TRÍ HIỆN TẠI: (latitude: %f, longitude: %f).", lastKnownLocation.getLatitude(), lastKnownLocation.getLongitude());
             }
-
-            ChatMessage aiMessage = new ChatMessage(
-                    UUID.randomUUID().toString(),
-                    currentSessionId,
-                    "...",
-                    null,
-                    ChatMessage.TYPE_AI,
-                    System.currentTimeMillis()
-            );
+            
+            final String promptToSend = dynamicSystemPrompt;
+            ChatMessage aiMessage = new ChatMessage(UUID.randomUUID().toString(), currentSessionId, "<think>", null, ChatMessage.TYPE_AI, System.currentTimeMillis());
             addMessageToUI(aiMessage);
 
-            final String finalSystemPrompt = dynamicSystemPrompt;
-            
-            // Lay lich su chat de gui kem
             List<ChatMessage> historyToSend = new ArrayList<>();
             if (chatList.size() > 2) {
-                int historyEndIndex = chatList.size() - 2;
-                int historyStartIndex = Math.max(0, historyEndIndex - 20); 
-                
-                for (int i = historyStartIndex; i < historyEndIndex; i++) {
+                int historyStartIndex = Math.max(0, chatList.size() - 8); 
+                for (int i = historyStartIndex; i < chatList.size() - 2; i++) {
                     historyToSend.add(chatList.get(i));
                 }
             }
-
+            
             executor.execute(() -> {
-                boolean thinkingEnabled = settingsManager.isThinkingEnabled();
-                apiManager.sendMessage(currentSessionId, msg, finalSystemPrompt, historyToSend, new ApiManager.StreamCallback() {
+                apiManager.sendMessage(MODEL_NAME, currentSessionId, msg, promptToSend, historyToSend, new ApiManager.StreamCallback() {
                     private final StringBuilder streamingResponse = new StringBuilder();
-                    private boolean firstChunk = true;
-
                     @Override
                     public void onPartialResult(String partialResult) {
                         if (!isGenerating) return;
-
-                        if (firstChunk) {
-                            streamingResponse.setLength(0);
-                            firstChunk = false;
-                        }
                         streamingResponse.append(partialResult);
-
                         String currentFullText = streamingResponse.toString();
-                        String textToDisplay;
-
-                        if (currentFullText.contains("|||")) {
-                            int splitIndex = currentFullText.indexOf("|||");
-                            textToDisplay = currentFullText.substring(0, splitIndex).trim();
-                        } else {
-                            textToDisplay = currentFullText;
-                        }
-
-                        final String finalText = textToDisplay;
-
+                        String textToDisplay = currentFullText.contains("|||") ? currentFullText.substring(0, currentFullText.indexOf("|||")).trim() : currentFullText;
+                        
                         long currentTime = System.currentTimeMillis();
                         if (currentTime - lastUpdateUiTime > 100) {
                             lastUpdateUiTime = currentTime;
                             mainHandler.post(() -> {
                                 if (!isGenerating) return;
-                                aiMessage.content = finalText;
+                                aiMessage.message = textToDisplay;
                                 chatAdapter.updateStreamingMessage(chatList.size() - 1);
                             });
                         }
                     }
 
-
                     @Override
                     public void onComplete(String fullResult, String error) {
-                        lastUpdateUiTime = 0;
-
-                        if (!isGenerating) return;
-
-                        mainHandler.post(() -> {
-                            isGenerating = false;
-                            toggleSendingState(false);
-                        });
-
+                        isGenerating = false;
+                        mainHandler.post(() -> toggleSendingState(false));
                         if (error != null) {
-                            Log.e(TAG, "API Error: " + error);
                             mainHandler.post(() -> {
-                                aiMessage.content = getString(R.string.error_message);
+                                aiMessage.message = getString(R.string.error_message);
                                 chatAdapter.notifyItemChanged(chatList.size() - 1);
                             });
                         } else {
-                            String textPart = fullResult;
-                            String jsonPart = null;
-
-                            if (fullResult.contains("|||")) {
-                                String[] parts = fullResult.split("\\|\\|\\|");
-                                if (parts.length > 0) textPart = parts[0].trim();
-                                if (parts.length > 1) jsonPart = parts[1].trim();
-                            }
-
-                            final String finalText = textPart;
-                            final String finalJson = jsonPart;
+                            int splitIndex = fullResult != null ? fullResult.indexOf("|||") : -1;
+                            String finalText = splitIndex != -1 ? fullResult.substring(0, splitIndex).trim() : (fullResult != null ? fullResult : "");
+                            String finalJson = splitIndex != -1 ? fullResult.substring(splitIndex + 3).trim() : null;
 
                             mainHandler.post(() -> {
-                                aiMessage.content = finalText;
+                                aiMessage.message = finalText;
                                 aiMessage.metadata = finalJson;
                                 chatAdapter.notifyItemChanged(chatList.size() - 1, "UPDATE_BUTTON");
-                                int lastIndex = chatAdapter.getItemCount() - 1;
-                                if (lastIndex >= 0) {
-                                    recyclerViewChat.scrollToPosition(lastIndex);
-                                }
                             });
 
                             executor.execute(() -> {
                                 database.chatMessageDao().insertMessage(aiMessage);
                                 syncMessageToFirestore(currentSessionId, aiMessage);
-
                                 Session s = database.sessionDao().getSessionById(currentSessionId);
                                 if (s != null) {
                                     s.setPreview_message(finalText);
@@ -443,139 +373,59 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
     private void setupGoogleSignIn() {
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(getString(R.string.default_web_client_id))
-                .requestEmail()
-                .build();
-
+                .requestIdToken(getString(R.string.default_web_client_id)).requestEmail().build();
         googleSignInClient = GoogleSignIn.getClient(this, gso);
-
-        googleSignInLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                        Task<GoogleSignInAccount> task =
-                                GoogleSignIn.getSignedInAccountFromIntent(result.getData());
-                        handleGoogleSignInResult(task);
-                    }
-                });
+        googleSignInLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                handleGoogleSignInResult(GoogleSignIn.getSignedInAccountFromIntent(result.getData()));
+            }
+        });
     }
 
     private void startGoogleSignIn() {
-        if (googleSignInClient != null) {
-            Intent signInIntent = googleSignInClient.getSignInIntent();
-            googleSignInLauncher.launch(signInIntent);
-        }
+        if (googleSignInClient != null) googleSignInLauncher.launch(googleSignInClient.getSignInIntent());
     }
 
     private void handleGoogleSignInResult(Task<GoogleSignInAccount> completedTask) {
         try {
             GoogleSignInAccount account = completedTask.getResult(ApiException.class);
-            if (account == null) {
-                Toast.makeText(this, getString(R.string.google_account_error), Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            // Sign in voi Firebase
-            String idToken = account.getIdToken();
-            AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
-
+            if (account == null) return;
+            AuthCredential credential = GoogleAuthProvider.getCredential(account.getIdToken(), null);
             mAuth.signInWithCredential(credential).addOnCompleteListener(this, task -> {
-                if (!task.isSuccessful()) {
-                    Toast.makeText(this, getString(R.string.firebase_login_error), Toast.LENGTH_SHORT).show();
-                    return;
-                }
-
+                if (!task.isSuccessful()) return;
                 FirebaseUser firebaseUser = mAuth.getCurrentUser();
                 if (firebaseUser == null) return;
-
-                String googleUserId = firebaseUser.getUid();
-                String displayName = firebaseUser.getDisplayName();
-                String email = firebaseUser.getEmail();
-                String avatarUrl = firebaseUser.getPhotoUrl() != null ? firebaseUser.getPhotoUrl().toString() : null;
-
-                // Luu vao Firestore va Room
-                saveUserToFirestore(googleUserId, displayName, email, avatarUrl);
-
+                String uid = firebaseUser.getUid();
+                saveUserToFirestore(uid, firebaseUser.getDisplayName(), firebaseUser.getEmail(), firebaseUser.getPhotoUrl() != null ? firebaseUser.getPhotoUrl().toString() : null);
                 executor.execute(() -> {
-                User existingUser = database.userDao().getUserByGoogleId(googleUserId);
-
-                if (existingUser == null) {
-                    // Tao user moi
-                    String userId = "google-" + googleUserId;
-                    long now = System.currentTimeMillis();
-                    User newUser = new User(
-                            userId,
-                            googleUserId,
-                            displayName,
-                            email,
-                            avatarUrl,
-                            false,
-                            0,
-                            now,
-                            now
-                    );
-                    database.userDao().insertUser(newUser);
-
-                    // Merge session tu Guest sang User moi
-                    String oldGuestUserId = currentUser.userId;
-                    database.sessionDao().updateSessionsUserId(oldGuestUserId, userId);
-
-                    existingUser = newUser;
-                } else {
-                    // Cap nhat thong tin
-                    existingUser.setDisplayName(displayName);
-                    existingUser.setEmail(email);
-                    existingUser.setAvatarUrl(avatarUrl);
-                    existingUser.setUpdatedAt(System.currentTimeMillis());
-                    database.userDao().updateUser(existingUser);
-                }
-
-                // Cap nhat SessionManager
-                User finalUser = existingUser;
-                mainHandler.post(() -> {
-                    currentUser = new UserSession(
-                            finalUser.userId,
-                            finalUser.displayName,
-                            finalUser.email,
-                            finalUser.avatarUrl,
-                            false,
-                            UserSession.PROVIDER_GOOGLE,
-                            finalUser.questionCount
-                    );
-                    sessionManager.setCurrentUser(currentUser);
-
-                    Toast.makeText(this, getString(R.string.login_success), Toast.LENGTH_SHORT).show();
-                    updateUserButton();
-
-                    // Load lai sessions
-                    loadUserSessions();
-
-                    // Sync sessions voi Firestore
-                    syncLocalSessionsToFirestore();
-
-                    // Attach realtime listeners
-                    attachFirebaseListenersIfNeeded();
+                    User existingUser = database.userDao().getUserByGoogleId(uid);
+                    if (existingUser == null) {
+                        User newUser = new User("google-" + uid, uid, firebaseUser.getDisplayName(), firebaseUser.getEmail(), firebaseUser.getPhotoUrl() != null ? firebaseUser.getPhotoUrl().toString() : null, false, 0, System.currentTimeMillis(), System.currentTimeMillis());
+                        database.userDao().insertUser(newUser);
+                        database.sessionDao().updateSessionsUserId(currentUser.userId, newUser.userId);
+                        existingUser = newUser;
+                    }
+                    User finalUser = existingUser;
+                    mainHandler.post(() -> {
+                        currentUser = new UserSession(finalUser.userId, finalUser.displayName, finalUser.email, finalUser.avatarUrl, false, UserSession.PROVIDER_GOOGLE, finalUser.questionCount);
+                        sessionManager.setCurrentUser(currentUser);
+                        updateUserButton();
+                        loadUserSessions();
+                        syncLocalSessionsToFirestore();
+                        attachFirebaseListenersIfNeeded();
+                    });
                 });
             });
-            });
-
-        } catch (ApiException e) {
-                Toast.makeText(this, getString(R.string.google_login_error), Toast.LENGTH_SHORT).show();
-        }
+        } catch (ApiException e) { Log.e(TAG, "Login error", e); }
     }
 
     private void applyThemeOnStartup() {
-        int nightMode = settingsManager.isDarkThemeEnabled() ?
-                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES :
-                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO;
-        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode);
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(settingsManager.isDarkThemeEnabled() ? androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES : androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO);
     }
 
     private void applyLanguageOnStartup() {
-        String language = settingsManager.getLanguage();
-        java.util.Locale locale = new java.util.Locale(language);
-        java.util.Locale.setDefault(locale);
-
+        Locale locale = new Locale(settingsManager.getLanguage());
+        Locale.setDefault(locale);
         android.content.res.Configuration config = new android.content.res.Configuration();
         config.setLocale(locale);
         getResources().updateConfiguration(config, getResources().getDisplayMetrics());
@@ -584,292 +434,130 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     private void showUserMenu(View anchor) {
         PopupMenu popupMenu = new PopupMenu(this, anchor, Gravity.END, 0, R.style.PopupMenuStyle);
         popupMenu.getMenuInflater().inflate(R.menu.user_menu, popupMenu.getMenu());
-
         popupMenu.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == R.id.menu_settings) {
-                showSettingsDialog();
-                return true;
-            } else if (item.getItemId() == R.id.menu_logout) {
-                handleLogout();
-                return true;
-            }
-            return false;
+            if (item.getItemId() == R.id.menu_settings) showSettingsDialog();
+            else if (item.getItemId() == R.id.menu_logout) handleLogout();
+            return true;
         });
-
         popupMenu.show();
     }
 
     private void showSettingsDialog() {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_settings, null);
-
         androidx.appcompat.widget.SwitchCompat switchTheme = dialogView.findViewById(R.id.switchTheme);
         androidx.appcompat.widget.SwitchCompat switchLanguage = dialogView.findViewById(R.id.switchLanguage);
-        androidx.appcompat.widget.SwitchCompat switchThinking = dialogView.findViewById(R.id.switchThinking);
-
-        // Set giá trị hiện tại
         switchTheme.setChecked(settingsManager.isDarkThemeEnabled());
         switchLanguage.setChecked(SettingsManager.LANG_EN.equals(settingsManager.getLanguage()));
-        switchThinking.setChecked(settingsManager.isThinkingEnabled());
-
-        Log.d(TAG, "Initial theme: " + settingsManager.isDarkThemeEnabled());
-        Log.d(TAG, "Initial language: " + settingsManager.getLanguage());
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.settings_title))
-                .setView(dialogView)
-                .setPositiveButton(getString(R.string.settings_save), (d, which) -> {
-                    boolean themeChanged = settingsManager.isDarkThemeEnabled() != switchTheme.isChecked();
-                    boolean languageChanged = !settingsManager.getLanguage().equals(
-                            switchLanguage.isChecked() ? SettingsManager.LANG_EN : SettingsManager.LANG_VI);
-
-                    Log.d(TAG, "Theme changed: " + themeChanged + ", current: " + settingsManager.isDarkThemeEnabled() + ", new: " + switchTheme.isChecked());
-                    Log.d(TAG, "Language changed: " + languageChanged + ", current: " + settingsManager.getLanguage() + ", new: " + (switchLanguage.isChecked() ? SettingsManager.LANG_EN : SettingsManager.LANG_VI));
-
-                    // Lưu cấu hình
-                    settingsManager.setDarkThemeEnabled(switchTheme.isChecked());
-                    settingsManager.setLanguage(switchLanguage.isChecked() ? SettingsManager.LANG_EN : SettingsManager.LANG_VI);
-                    settingsManager.setThinkingEnabled(switchThinking.isChecked());
-
-                    // Áp dụng theme nếu thay đổi
-                    if (themeChanged) {
-                        applyTheme();
-                    }
-
-                    // Áp dụng ngôn ngữ nếu thay đổi
-                    if (languageChanged) {
-                        applyLanguage();
-                    }
-
-                    Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton(getString(R.string.settings_cancel), null)
-                .create();
-
-        dialog.show();
+        new AlertDialog.Builder(this).setTitle(getString(R.string.settings_title)).setView(dialogView).setPositiveButton(getString(R.string.settings_save), (d, which) -> {
+            settingsManager.setDarkThemeEnabled(switchTheme.isChecked());
+            settingsManager.setLanguage(switchLanguage.isChecked() ? SettingsManager.LANG_EN : SettingsManager.LANG_VI);
+            recreate();
+        }).setNegativeButton(getString(R.string.settings_cancel), null).show();
     }
 
     private void handleLogout() {
-        new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.logout_title))
-                .setMessage(getString(R.string.logout_message))
-                .setPositiveButton(getString(R.string.logout_confirm), (d, which) -> {
-                    // Sign out Google
-                    if (googleSignInClient != null) {
-                        googleSignInClient.signOut().addOnCompleteListener(this, task -> {
-                            // Reset ve Guest
-                            currentUser = sessionManager.createGuestSession();
-                            updateUserButton();
-                            loadUserSessions();
-                            Toast.makeText(this, getString(R.string.logout_success), Toast.LENGTH_SHORT).show();
-                        });
-                    }
-                })
-                .setNegativeButton(getString(R.string.delete_cancel), null)
-                .show();
-    }
-
-    private void applyTheme() {
-        // Áp dụng theme mới
-        int nightMode = settingsManager.isDarkThemeEnabled() ?
-                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES :
-                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO;
-        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(nightMode);
-        Log.d(TAG, "Applied theme: " + (nightMode == androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES ? "dark" : "light"));
-
-        // Recreate activity để áp dụng theme
-        recreate();
-    }
-
-    private void applyLanguage() {
-        // Áp dụng ngôn ngữ mới
-        String language = settingsManager.getLanguage();
-        java.util.Locale locale = new java.util.Locale(language);
-        java.util.Locale.setDefault(locale);
-
-        android.content.res.Configuration config = new android.content.res.Configuration();
-        config.setLocale(locale);
-        getResources().updateConfiguration(config, getResources().getDisplayMetrics());
-        Log.d(TAG, "Applied language: " + language);
-
-        // Recreate activity để áp dụng ngôn ngữ
-        recreate();
+        new AlertDialog.Builder(this).setTitle(getString(R.string.logout_title)).setMessage(getString(R.string.logout_message)).setPositiveButton(getString(R.string.logout_confirm), (d, which) -> {
+            if (googleSignInClient != null) googleSignInClient.signOut().addOnCompleteListener(this, task -> {
+                currentUser = sessionManager.createGuestSession();
+                updateUserButton();
+                loadUserSessions();
+            });
+        }).setNegativeButton(getString(R.string.delete_cancel), null).show();
     }
 
     private void updateUserButton() {
-        if (currentUser.isGuest) {
-            // Hien thi icon mac dinh cho Guest
-            buttonUser.setImageResource(R.drawable.ic_avatar);
-        } else {
-            // Load avatar tu Google
-            if (currentUser.avatarUrl != null && !currentUser.avatarUrl.isEmpty()) {
-                Glide.with(this)
-                        .load(currentUser.avatarUrl)
-                        .circleCrop()
-                        .placeholder(R.drawable.ic_avatar)
-                        .into(buttonUser);
-            } else {
-                buttonUser.setImageResource(R.drawable.ic_avatar);
-            }
-        }
+        if (currentUser.isGuest) buttonUser.setImageResource(R.drawable.ic_avatar);
+        else Glide.with(this).load(currentUser.avatarUrl).circleCrop().placeholder(R.drawable.ic_avatar).into(buttonUser);
     }
 
     private void showGuestLimitDialog() {
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_guest_limit, null);
-        MaterialButton buttonLoginNow = dialogView.findViewById(R.id.buttonLoginNow);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setView(dialogView)
-                .setCancelable(true)
-                .create();
-
-        // Lam mo background va center dialog
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-            dialog.getWindow().setDimAmount(0.7f); // Lam mo 70%
-        }
-
-        buttonLoginNow.setOnClickListener(v -> {
-            dialog.dismiss();
-            startGoogleSignIn();
-        });
-
+        View v = getLayoutInflater().inflate(R.layout.dialog_guest_limit, null);
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(v).create();
+        v.findViewById(R.id.buttonLoginNow).setOnClickListener(view -> { dialog.dismiss(); startGoogleSignIn(); });
         dialog.show();
     }
 
     private void loadUserSessions() {
         executor.execute(() -> {
-            String userId = currentUser.userId;
-
-            // Kiem tra xem user co session nao khong
-            int count = database.sessionDao().getSessionCountByUserId(userId);
+            int count = database.sessionDao().getSessionCountByUserId(currentUser.userId);
             if (count == 0) {
-                // Tao session moi
                 String newId = UUID.randomUUID().toString();
-                long now = System.currentTimeMillis();
-                Session session = new Session(
-                        newId,
-                        userId,
-                        "Cuộc trò chuyện mới",
-                        "",
-                        now,
-                        false
-                );
-                database.sessionDao().insertSession(session);
-                syncSessionToFirestore(session);
+                Session s = new Session(newId, currentUser.userId, "Cuộc trò chuyện mới", "", System.currentTimeMillis(), false);
+                database.sessionDao().insertSession(s);
+                syncSessionToFirestore(s);
                 currentSessionId = newId;
-        } else {
-                // Lay session moi nhat
-                List<Session> sessions = database.sessionDao().getSessionsByUserId(userId);
-                if (!sessions.isEmpty()) {
-                    currentSessionId = sessions.get(0).session_id;
-                }
+            } else {
+                List<Session> sessions = database.sessionDao().getSessionsByUserId(currentUser.userId);
+                currentSessionId = sessions.get(0).session_id;
             }
-
-            List<Session> allSessions = database.sessionDao().getSessionsByUserId(userId);
-            List<ChatMessage> messages = database.chatMessageDao().getMessageByeSession(currentSessionId);
-
+            List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
+            List<ChatMessage> msgs = database.chatMessageDao().getMessageByeSession(currentSessionId);
             mainHandler.post(() -> {
-                sessionAdapter.setSessions(allSessions);
-                chatList.clear();
-                chatList.addAll(messages);
+                sessionAdapter.setSessions(all);
+                chatList.clear(); chatList.addAll(msgs);
                 chatAdapter.notifyDataSetChanged();
-                if (chatList.isEmpty()) {
-                    addWelcomeMessage();
-                }
+                updateEmptyStateUi(chatList.isEmpty());
                 generateRandomSuggestions();
-                updateEmptyStateUi();
             });
         });
     }
 
     private void createNewSession() {
         currentSessionId = UUID.randomUUID().toString();
-        long now = System.currentTimeMillis();
-
-        Session session = new Session(
-                currentSessionId,
-                currentUser.userId,
-                "Cuộc trò chuyện mới",
-                "",
-                now,
-                false
-        );
-
+        Session s = new Session(currentSessionId, currentUser.userId, "Cuộc trò chuyện mới", "", System.currentTimeMillis(), false);
         executor.execute(() -> {
-            database.sessionDao().insertSession(session);
-            syncSessionToFirestore(session);
+            database.sessionDao().insertSession(s);
+            syncSessionToFirestore(s);
             List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
             mainHandler.post(() -> {
-                chatList.clear();
-                chatAdapter.notifyDataSetChanged();
+                chatList.clear(); chatAdapter.notifyDataSetChanged();
                 sessionAdapter.setSessions(all);
-                addWelcomeMessage();
-                updateEmptyStateUi();
+                updateEmptyStateUi(true);
+                generateRandomSuggestions();
             });
         });
     }
 
-    private void loadSession(String sessionId) {
-        currentSessionId = sessionId;
+    private void loadSession(String id) {
+        currentSessionId = id;
         executor.execute(() -> {
-            List<ChatMessage> messages = database.chatMessageDao().getMessageByeSession(sessionId);
+            List<ChatMessage> msgs = database.chatMessageDao().getMessageByeSession(id);
             mainHandler.post(() -> {
-                chatList.clear();
-                chatList.addAll(messages);
+                chatList.clear(); chatList.addAll(msgs);
                 chatAdapter.notifyDataSetChanged();
-
-                int lastIndex = chatAdapter.getItemCount() - 1;
-                if (lastIndex >= 0) {
-                    recyclerViewChat.scrollToPosition(lastIndex);
-                }
-
-                updateEmptyStateUi();
+                if (!chatList.isEmpty()) recyclerViewChat.scrollToPosition(chatList.size()-1);
+                updateEmptyStateUi(chatList.isEmpty());
             });
         });
     }
 
     private void showSessionOptionsDialog(Session session) {
         String[] options = {"Đổi tên", "Ghim", "Xóa"};
-        if (session.isPinned) {
-            options[1] = "Bỏ ghim";
-        }
-
-        new AlertDialog.Builder(this)
-                .setTitle(session.title)
-                .setItems(options, (dialog, which) -> {
-                    if (which == 0) {
-                        showRenameDialog(session);
-                    } else if (which == 1) {
-                        togglePinSession(session);
-                    } else if (which == 2) {
-                        confirmDeleteSession(session);
-                    }
-                })
-                .show();
+        if (session.isPinned) options[1] = "Bỏ ghim";
+        new AlertDialog.Builder(this).setTitle(session.title).setItems(options, (dialog, which) -> {
+            if (which == 0) showRenameDialog(session);
+            else if (which == 1) togglePinSession(session);
+            else if (which == 2) confirmDeleteSession(session);
+        }).show();
     }
 
     private void showRenameDialog(Session session) {
         final EditText input = new EditText(this);
         input.setText(session.title);
-
-        new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.rename_title))
-                .setView(input)
-                .setPositiveButton(getString(R.string.rename_save), (dialog, which) -> {
-                    String newTitle = input.getText().toString().trim();
-                    if (!newTitle.isEmpty()) {
-                        executor.execute(() -> {
-                            session.setTitle(newTitle);
-                            session.setLast_updated(System.currentTimeMillis());
-                            database.sessionDao().updateSession(session);
-                            syncSessionToFirestore(session);
-                            List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
-                            mainHandler.post(() -> sessionAdapter.setSessions(all));
-                        });
-                    }
-                })
-                .setNegativeButton(getString(R.string.rename_cancel), null)
-                .show();
+        new AlertDialog.Builder(this).setTitle(getString(R.string.rename_title)).setView(input)
+            .setPositiveButton(getString(R.string.rename_save), (dialog, which) -> {
+                String newTitle = input.getText().toString().trim();
+                if (!newTitle.isEmpty()) {
+                    executor.execute(() -> {
+                        session.setTitle(newTitle);
+                        session.setLast_updated(System.currentTimeMillis());
+                        database.sessionDao().updateSession(session);
+                        syncSessionToFirestore(session);
+                        List<Session> all = database.sessionDao().getSessionsByUserId(currentUser.userId);
+                        mainHandler.post(() -> sessionAdapter.setSessions(all));
+                    });
+                }
+            }).setNegativeButton(getString(R.string.rename_cancel), null).show();
     }
 
     private void togglePinSession(Session session) {
@@ -886,134 +574,85 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     private void confirmDeleteSession(Session session) {
         executor.execute(() -> {
             int count = database.sessionDao().getSessionCountByUserId(currentUser.userId);
-
             if (count <= 1) {
-                    mainHandler.post(() ->
-                            Toast.makeText(this,
-                                getString(R.string.min_sessions_message),
-                                    Toast.LENGTH_LONG).show()
-                    );
-                    return;
+                mainHandler.post(() -> Toast.makeText(this, getString(R.string.min_sessions_message), Toast.LENGTH_LONG).show());
+                return;
             }
-
-            mainHandler.post(() -> {
-                new AlertDialog.Builder(this)
-                        .setTitle(getString(R.string.delete_title))
-                        .setMessage(getString(R.string.delete_message))
-                        .setPositiveButton(getString(R.string.delete_confirm), (dialog, which) -> {
-                            executor.execute(() -> {
-                                database.chatMessageDao().deleteMessagesBySession(session.session_id);
-                                database.sessionDao().deleteSessionById(session.session_id);
-
-                                List<Session> remaining = database.sessionDao().getSessionsByUserId(currentUser.userId);
-                                if (remaining.isEmpty()) {
-                                    String newId = UUID.randomUUID().toString();
-                                    long now = System.currentTimeMillis();
-                                    Session newSession = new Session(
-                                            newId,
-                                            currentUser.userId,
-                                            "Cuộc trò chuyện mới",
-                                            "",
-                                            now,
-                                            false
-                                    );
-                                    database.sessionDao().insertSession(newSession);
-                                    syncSessionToFirestore(newSession);
-                                    remaining = database.sessionDao().getSessionsByUserId(currentUser.userId);
-                                    currentSessionId = newId;
-                                } else {
-                                    currentSessionId = remaining.get(0).session_id;
-                                }
-
-                                List<ChatMessage> msgs = database.chatMessageDao().getMessageByeSession(currentSessionId);
-
-                                List<Session> finalRemaining = remaining;
-                                mainHandler.post(() -> {
-                                    sessionAdapter.setSessions(finalRemaining);
-                                    chatList.clear();
-                                    chatList.addAll(msgs);
-                                    chatAdapter.notifyDataSetChanged();
-                                    updateEmptyStateUi();
-                                });
-                        });
-                })
-                .setNegativeButton(getString(R.string.logout_cancel), null)
-                        .show();
-            });
+            mainHandler.post(() -> new AlertDialog.Builder(this).setTitle(getString(R.string.delete_title)).setMessage(getString(R.string.delete_message))
+                .setPositiveButton(getString(R.string.delete_confirm), (dialog, which) -> {
+                    executor.execute(() -> {
+                        database.chatMessageDao().deleteMessagesBySession(session.session_id);
+                        database.sessionDao().deleteSessionById(session.session_id);
+                        List<Session> remaining = database.sessionDao().getSessionsByUserId(currentUser.userId);
+                        if (remaining.isEmpty()) createNewSession();
+                        else {
+                            currentSessionId = remaining.get(0).session_id;
+                            loadSession(currentSessionId);
+                            mainHandler.post(() -> sessionAdapter.setSessions(remaining));
+                        }
+                    });
+                }).setNegativeButton(getString(R.string.logout_cancel), null).show());
         });
     }
 
-    private void requestLocationPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED) {
-            fetchLocationForContext();
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private void fetchLocationForContext() {
-        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                .addOnSuccessListener(this, location -> {
-                    if (location != null) {
-                        lastKnownLocation = location;
-                    }
-                });
+    private void updateEmptyStateUi(boolean isEmpty) {
+        layoutEmptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        recyclerViewChat.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+        recyclerViewSuggestions.setVisibility(View.VISIBLE);
     }
 
     private void generateRandomSuggestions() {
         mainHandler.post(() -> {
             try {
-                String[] allSuggestions = getResources().getStringArray(R.array.suggestion_questions);
-                List<String> suggestionList = new ArrayList<>(Arrays.asList(allSuggestions));
-                Collections.shuffle(suggestionList);
-                int suggestionCount = Math.min(3, suggestionList.size());
-                List<String> randomSuggestions = suggestionList.subList(0, suggestionCount);
-                suggestionAdapter.updateSuggestions(randomSuggestions);
-            } catch (Exception e) {
-                Log.e(TAG, "Error generating suggestions", e);
-            }
+                String[] all = getResources().getStringArray(R.array.suggestion_questions);
+                List<String> list = new ArrayList<>(Arrays.asList(all));
+                Collections.shuffle(list);
+                suggestionAdapter.updateSuggestions(list.subList(0, Math.min(3, list.size())));
+            } catch (Exception e) { Log.e(TAG, "Sug error", e); }
         });
     }
 
-    private void addMessageToUI(ChatMessage chatMessage) {
-        chatList.add(chatMessage);
+    private void addMessageToUI(ChatMessage m) {
+        chatList.add(m);
         chatAdapter.notifyItemInserted(chatList.size() - 1);
-        int lastIndex = chatAdapter.getItemCount() - 1;
-        if (lastIndex >= 0) {
-            recyclerViewChat.scrollToPosition(lastIndex);
-        }
-        updateEmptyStateUi();
+        recyclerViewChat.scrollToPosition(chatList.size() - 1);
+        updateEmptyStateUi(false);
     }
 
-    private void updateEmptyStateUi() {
-        if (chatList.isEmpty()) {
-            textViewEmptyChat.setVisibility(View.VISIBLE);
-            recyclerViewChat.setVisibility(View.GONE);
-        } else {
-            textViewEmptyChat.setVisibility(View.GONE);
-            recyclerViewChat.setVisibility(View.VISIBLE);
-        }
+    @Override public void onPlacesButtonClick(String json) {
+        PlacesBottomSheetFragment.newInstance(json, lastKnownLocation).show(getSupportFragmentManager(), "places");
     }
 
-    private void addWelcomeMessage() {
-        ChatMessage welcomeMessage = new ChatMessage(
-                UUID.randomUUID().toString(),
-                currentSessionId,
-                getString(R.string.welcome_message),
-                null,
-                ChatMessage.TYPE_AI,
-                System.currentTimeMillis()
-        );
-        addMessageToUI(welcomeMessage);
+    private void saveUserToFirestore(String uid, String name, String email, String url) {
+        java.util.Map<String, Object> u = new java.util.HashMap<>();
+        u.put("uid", uid); u.put("displayName", name); u.put("email", email); u.put("photoUrl", url); u.put("updatedAt", System.currentTimeMillis());
+        firestore.collection("users").document(uid).set(u, SetOptions.merge());
+    }
 
-        executor.execute(() -> {
-            database.chatMessageDao().insertMessage(welcomeMessage);
-            syncMessageToFirestore(currentSessionId, welcomeMessage);
-        });
+    private void syncSessionToFirestore(Session s) {
+        FirebaseUser u = mAuth.getCurrentUser();
+        if (u == null) return;
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("userId", u.getUid()); data.put("title", s.title); data.put("previewMessage", s.preview_message); data.put("updatedAt", s.last_updated);
+        firestore.collection("users").document(u.getUid()).collection("sessions").document(s.session_id).set(data, SetOptions.merge());
+    }
 
-        generateRandomSuggestions();
+    private void syncMessageToFirestore(String sId, ChatMessage m) {
+        FirebaseUser u = mAuth.getCurrentUser();
+        if (u == null) return;
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("role", (m.type == ChatMessage.TYPE_USER) ? "user" : "model"); data.put("content", m.message); data.put("metadata", m.metadata); data.put("createdAt", m.timestamp);
+        firestore.collection("users").document(u.getUid()).collection("sessions").document(sId).collection("messages").document(m.message_id).set(data, SetOptions.merge());
+    }
+
+    private void requestLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) fetchLocationForContext();
+        else requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
+    }
+
+    @SuppressLint("MissingPermission")
+    private void fetchLocationForContext() {
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener(this, l -> { if (l != null) lastKnownLocation = l; });
     }
 
     private void toggleSendingState(boolean generating) {
@@ -1031,34 +670,12 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
         }
     }
 
-    @Override
-    public void onPlacesButtonClick(String jsonMetadata) {
-        PlacesBottomSheetFragment bottomSheet =
-                PlacesBottomSheetFragment.newInstance(jsonMetadata, lastKnownLocation);
-        bottomSheet.show(getSupportFragmentManager(), bottomSheet.getTag());
-    }
-
-    private void saveUserToFirestore(String uid, String displayName, String email, String photoUrl) {
-        java.util.Map<String, Object> user = new java.util.HashMap<>();
-        user.put("uid", uid);
-        user.put("displayName", displayName);
-        user.put("email", email);
-        user.put("photoUrl", photoUrl);
-        user.put("updatedAt", System.currentTimeMillis());
-
-        firestore.collection("users").document(uid)
-                .set(user, SetOptions.merge());
-    }
-
     private void syncLocalSessionsToFirestore() {
         FirebaseUser firebaseUser = mAuth.getCurrentUser();
         if (firebaseUser == null) return;
-
         String uid = firebaseUser.getUid();
-
         executor.execute(() -> {
             List<Session> localSessions = database.sessionDao().getSessionsByUserId(currentUser.userId);
-
             for (Session session : localSessions) {
                 java.util.Map<String, Object> sessionData = new java.util.HashMap<>();
                 sessionData.put("sessionId", session.session_id);
@@ -1066,96 +683,35 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 sessionData.put("title", session.title);
                 sessionData.put("previewMessage", session.preview_message);
                 sessionData.put("lastUpdated", session.last_updated);
-                sessionData.put("isPinned", session.isPinned);
-
-                firestore.collection("sessions").document(session.session_id)
-                        .set(sessionData, SetOptions.merge());
-
+                firestore.collection("users").document(uid).collection("sessions").document(session.session_id).set(sessionData, SetOptions.merge());
                 List<ChatMessage> messages = database.chatMessageDao().getMessageByeSession(session.session_id);
-                for (ChatMessage msg : messages) {
-                    syncMessageToFirestore(session.session_id, msg);
-                }
+                for (ChatMessage msg : messages) syncMessageToFirestore(session.session_id, msg);
             }
         });
-    }
-
-    private void syncSessionToFirestore(Session session) {
-        FirebaseUser firebaseUser = mAuth.getCurrentUser();
-        if (firebaseUser == null) return;
-
-        java.util.Map<String, Object> sessionData = new java.util.HashMap<>();
-        sessionData.put("userId", firebaseUser.getUid());
-        sessionData.put("title", session.title);
-        sessionData.put("previewMessage", session.preview_message);
-        sessionData.put("updatedAt", session.last_updated);
-        sessionData.put("isPinned", session.isPinned);
-
-        firestore.collection("users").document(firebaseUser.getUid())
-                .collection("sessions").document(session.session_id)
-                .set(sessionData, SetOptions.merge())
-                .addOnSuccessListener(aVoid -> Log.d(TAG, "Synced session to Firestore: " + session.session_id))
-                .addOnFailureListener(e -> Log.e(TAG, "Failed to sync session", e));
-    }
-
-    private void syncMessageToFirestore(String sessionId, ChatMessage message) {
-        FirebaseUser firebaseUser = mAuth.getCurrentUser();
-        if (firebaseUser == null) return;
-
-        java.util.Map<String, Object> messageData = new java.util.HashMap<>();
-        messageData.put("role", message.role);
-        messageData.put("content", message.content);
-        messageData.put("metadata", message.metadata);
-        messageData.put("createdAt", message.createdAt);
-        messageData.put("updatedAt", message.updatedAt);
-        messageData.put("status", message.status);
-        messageData.put("deviceId", message.deviceId);
-
-        firestore.collection("users").document(firebaseUser.getUid())
-                .collection("sessions").document(sessionId)
-                .collection("messages").document(message.message_id)
-                .set(messageData, SetOptions.merge())
-                .addOnSuccessListener(aVoid -> Log.d(TAG, "Synced message to Firestore: " + message.message_id))
-                .addOnFailureListener(e -> Log.e(TAG, "Failed to sync message", e));
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        // Attach Firebase listeners when activity becomes visible
-        // // quản lý lifecycle
         attachFirebaseListenersIfNeeded();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // Ensure listeners are attached when activity resumes
         attachFirebaseListenersIfNeeded();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
-        // Detach Firebase listeners when activity is not visible
-        // // detach listeners ở onStop/onDestroy để tránh memory leak
     }
 
-    /**
-     * Attach Firebase listeners nếu user đã login và chưa attach
-     */
     private void attachFirebaseListenersIfNeeded() {
         if (currentUser != null && !currentUser.isGuest && mAuth.getCurrentUser() != null) {
-            String uid = mAuth.getCurrentUser().getUid();
-            Log.d(TAG, "Attaching Firebase listeners for user: " + uid);
-            // syncHelper.attachListeners(uid); // Disabled for now
+            Log.d(TAG, "Attaching Firebase listeners for user: " + mAuth.getCurrentUser().getUid());
         }
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (executor != null) {
-            executor.shutdown();
-        }
-    }
+    @Override protected void onDestroy() { super.onDestroy(); if (executor != null) executor.shutdown(); }
 }

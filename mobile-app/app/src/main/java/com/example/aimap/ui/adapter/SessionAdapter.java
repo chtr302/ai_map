@@ -29,7 +29,7 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionV
     private final List<Session> sessions = new ArrayList<>();
     private final OnSessionClickListener listener;
     private final SimpleDateFormat dateFormat =
-            new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault());
+            new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()); // Chỉ hiện ngày
 
     public SessionAdapter(OnSessionClickListener listener) {
         this.listener = listener;
@@ -59,12 +59,10 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionV
         String title = (session.title == null || session.title.trim().isEmpty())
                 ? "Cuộc trò chuyện mới"
                 : session.title;
-        String preview = (session.preview_message == null || session.preview_message.trim().isEmpty())
-                ? "Bắt đầu trò chuyện..."
-                : session.preview_message;
-
+        
         holder.textSessionTitle.setText(title);
-        holder.textSessionPreview.setText(preview);
+        // holder.textSessionPreview.setText(preview); // Đã ẩn trong layout
+        
         holder.textSessionDate.setText(
                 dateFormat.format(new Date(session.last_updated))
         );
