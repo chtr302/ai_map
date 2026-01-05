@@ -6,8 +6,8 @@
     android:gravity="start|top"
     android:paddingStart="8dp"
     android:paddingEnd="8dp"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp">
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
 
     <androidx.cardview.widget.CardView
         android:layout_width="32dp"
@@ -31,6 +31,39 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- Chỉ hiển thị dòng trạng thái khi đang nghĩ -->
+        <LinearLayout
+            android:id="@+id/layoutThinkingStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/chat_bubble_left"
+            android:backgroundTint="#F2F2F7"
+            android:paddingStart="12dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:layout_marginBottom="4dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_marginEnd="8dp"
+                android:indeterminateTint="#8E8E93"
+                style="?android:attr/progressBarStyleSmall" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Loco AI đang suy nghĩ..."
+                android:textSize="13sp"
+                android:textColor="#8E8E93"
+                android:textStyle="italic" />
+        </LinearLayout>
+
+        <!-- Bong bóng câu trả lời chính -->
         <TextView
             android:id="@+id/tvMessage"
             android:background="@drawable/chat_bubble_left"
@@ -39,7 +72,8 @@
             android:padding="12dp"
             android:maxWidth="280dp"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content"
+            android:visibility="gone"/>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnViewPlaces"
@@ -60,7 +94,7 @@
             android:paddingBottom="0dp"
             android:paddingStart="12dp"
             android:paddingEnd="16dp"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="6dp"
             android:visibility="gone"/>
     </LinearLayout>
 </LinearLayout>
