@@ -535,6 +535,10 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
     private void loadSession(String id) {
         currentSessionId = id;
+        // Cập nhật session đang chọn cho sidebar
+        if (sessionAdapter != null) {
+            sessionAdapter.setCurrentSessionId(id);
+        }
         executor.execute(() -> {
             List<ChatMessage> msgs = database.chatMessageDao().getMessageByeSession(id);
             mainHandler.post(() -> {

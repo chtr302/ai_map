@@ -42,12 +42,15 @@
                 android:maxLines="1"
                 android:ellipsize="end" />
 
-            <!-- Đã ẩn textSessionPreview -->
             <TextView
                 android:id="@+id/textSessionPreview"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:visibility="gone"/>
+                android:visibility="gone"
+                android:textColor="@color/textSecondary"
+                android:textSize="13sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
 
             <TextView
                 android:id="@+id/textSessionDate"
@@ -59,7 +62,6 @@
                 android:textColor="@color/textSecondary" />
         </LinearLayout>
 
-        <!-- Nút menu dấu ... căn giữa -->
         <ImageButton
             android:id="@+id/buttonSessionMenu"
             android:layout_width="32dp"
@@ -67,8 +69,9 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_more_vert"
             app:tint="@color/textSecondary"
-            android:contentDescription="Tùy chọn"
+            android:contentDescription="@string/session_menu_desc"
             android:layout_marginStart="8dp"/>
 
     </LinearLayout>
 </androidx.cardview.widget.CardView>
+
