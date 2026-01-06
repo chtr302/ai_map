@@ -56,7 +56,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Loco AI chào bạn"
+                    android:text="@string/empty_state_title"
                     android:textColor="@color/textBlueGlow"
                     android:textSize="24sp"
                     android:textStyle="bold"
@@ -204,3 +204,4 @@
             android:layout_weight="1" />
     </LinearLayout>
 </androidx.drawerlayout.widget.DrawerLayout>
+

@@ -22,14 +22,14 @@ import java.util.Locale;
 public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionViewHolder> {
 
     public interface OnSessionClickListener {
-        void onSessionClick(Session session);      // click: load session
-        void onSessionMenuClick(Session session);  // click nút ...: rename / xóa
+        void onSessionClick(Session session);      // Click: tải phiên chat
+        void onSessionMenuClick(Session session);  // Click nút ...: menu phiên chat
     }
 
     private final List<Session> sessions = new ArrayList<>();
     private final OnSessionClickListener listener;
     private final SimpleDateFormat dateFormat =
-            new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()); // Chỉ hiện ngày
+            new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()); // Định dạng ngày
 
     public SessionAdapter(OnSessionClickListener listener) {
         this.listener = listener;
@@ -57,22 +57,22 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionV
         Session session = sessions.get(position);
 
         String title = (session.title == null || session.title.trim().isEmpty())
-                ? "Cuộc trò chuyện mới"
+                ? holder.itemView.getContext().getString(R.string.new_conversation)
                 : session.title;
-        
+
         holder.textSessionTitle.setText(title);
-        // holder.textSessionPreview.setText(preview); // Đã ẩn trong layout
-        
+        // holder.textSessionPreview.setText(preview); // Chưa cần trong layout
+
         holder.textSessionDate.setText(
                 dateFormat.format(new Date(session.last_updated))
         );
 
-        // Click item -> load session
+        // Click item -> tải phiên chat
         holder.itemView.setOnClickListener(v -> {
             if (listener != null) listener.onSessionClick(session);
         });
 
-        // Click nút ... -> mở menu đổi tên / xóa
+        // Click nút ... -> mở menu phiên chat
         holder.buttonSessionMenu.setOnClickListener(v -> {
             if (listener != null) listener.onSessionMenuClick(session);
         });
@@ -98,3 +98,4 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionV
         }
     }
 }
+

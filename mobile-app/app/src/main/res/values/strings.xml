@@ -13,7 +13,7 @@
 
     <!-- Dialogs -->
     <string name="settings_title">Cài đặt</string>
-    <string name="settings_theme">Chế độ giao diện</string>
+    <string name="settings_theme">Chủ đề giao diện</string>
     <string name="settings_theme_light">Sáng</string>
     <string name="settings_theme_dark">Tối</string>
     <string name="settings_language">Ngôn ngữ</string>
@@ -40,15 +40,15 @@
     <string name="delete_cancel">Hủy</string>
 
     <string name="guest_limit_title">Đã đạt giới hạn</string>
-    <string name="guest_limit_message">Khách hàng chỉ được hỏi tối đa 5 câu hỏi. Hãy đăng nhập để tiếp tục sử dụng.</string>
+    <string name="guest_limit_message">Khách chỉ được hỏi tối đa 5 câu. Hãy đăng nhập để tiếp tục sử dụng.</string>
     <string name="guest_limit_login">Đăng nhập với Google</string>
 
     <!-- Messages -->
     <string name="welcome_message">Xin chào! Tôi là Loco AI, một trợ lý ảo chuyên trả lời các câu hỏi liên quan đến địa điểm. Hãy cho tôi biết bạn cần tìm gì nhé.</string>
-    <string name="error_message">Server AI hiện tại đang có lỗi, đợi 1 chút rồi Hậu sẽ xử lý vấn đề này rồi bạn sẽ tương tác với Loco được nhé.</string>
+    <string name="error_message">Server AI hiện tại đang gặp lỗi, vui lòng thử lại sau.</string>
     <string name="location_permission_message">Câu hỏi này cần vị trí, vui lòng cấp quyền...</string>
     <string name="location_denied_message">Không có quyền truy cập vị trí, một số câu hỏi sẽ không hoạt động.</string>
-    <string name="min_sessions_message">Đây là cuộc trò chuyện còn lại duy nhất của chúng ta, bạn không thể xóa nó như vậy được.</string>
+    <string name="min_sessions_message">Đây là cuộc trò chuyện duy nhất, bạn không thể xóa.</string>
     <string name="settings_saved">Đã lưu cài đặt</string>
     <string name="logout_success">Đã đăng xuất</string>
     <string name="login_success">Đăng nhập thành công!</string>
@@ -69,7 +69,10 @@
     <string name="theme_dark">Giao diện tối (Dark Mode)</string>
     <string name="language_english">Tiếng Anh (English)</string>
 
-    <!-- Menu Extensions -->
+    <!-- Menu & empty state -->
     <string name="menu_settings">Cài đặt</string>
     <string name="menu_logout">Đăng xuất</string>
+    <string name="session_pinned_desc">Phiên chat đã ghim</string>
+    <string name="session_menu_desc">Tùy chọn phiên chat</string>
+    <string name="empty_state_title">Loco AI chào bạn</string>
 </resources>

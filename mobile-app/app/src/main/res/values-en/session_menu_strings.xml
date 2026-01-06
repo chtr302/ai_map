@@ -1,0 +1,12 @@
+<resources>
+    <!-- Menu for session actions -->
+    <string name="session_menu_rename">Rename</string>
+    <string name="session_menu_pin">Pin</string>
+    <string name="session_menu_unpin">Unpin</string>
+    <string name="session_menu_delete">Delete</string>
+
+    <!-- Content descriptions -->
+    <string name="session_pinned_desc">Pinned conversation</string>
+    <string name="session_menu_desc">Conversation options</string>
+</resources>
+

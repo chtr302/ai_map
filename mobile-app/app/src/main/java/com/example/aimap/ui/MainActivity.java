@@ -14,6 +14,8 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -206,7 +208,7 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
 
             @Override
             public void onSessionMenuClick(Session session) {
-                showSessionOptionsDialog(session);
+                showSessionOptionsDialogLocalized(session);
             }
         });
         recyclerViewDrawerSessions.setLayoutManager(new LinearLayoutManager(this));
@@ -434,6 +436,19 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
     private void showUserMenu(View anchor) {
         PopupMenu popupMenu = new PopupMenu(this, anchor, Gravity.END, 0, R.style.PopupMenuStyle);
         popupMenu.getMenuInflater().inflate(R.menu.user_menu, popupMenu.getMenu());
+
+        // Đổi màu chữ menu user
+        int textColor = ContextCompat.getColor(this, R.color.userMenuText);
+        for (int i = 0; i < popupMenu.getMenu().size(); i++) {
+            android.view.MenuItem item = popupMenu.getMenu().getItem(i);
+            CharSequence title = item.getTitle();
+            if (title != null) {
+                SpannableString span = new SpannableString(title);
+                span.setSpan(new ForegroundColorSpan(textColor), 0, span.length(), 0);
+                item.setTitle(span);
+            }
+        }
+
         popupMenu.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.menu_settings) showSettingsDialog();
             else if (item.getItemId() == R.id.menu_logout) handleLogout();
@@ -529,6 +544,27 @@ public class MainActivity extends AppCompatActivity implements ChatAdapter.OnPla
                 updateEmptyStateUi(chatList.isEmpty());
             });
         });
+    }
+
+    // Menu chỉnh sửa session theo ngôn ngữ
+    private void showSessionOptionsDialogLocalized(Session session) {
+        String rename = getString(R.string.session_menu_rename);
+        String pin = getString(session.isPinned ? R.string.session_menu_unpin : R.string.session_menu_pin);
+        String deleteOption = getString(R.string.session_menu_delete);
+        String[] options = {rename, pin, deleteOption};
+
+        new AlertDialog.Builder(this)
+                .setTitle(session.title)
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        showRenameDialog(session);
+                    } else if (which == 1) {
+                        togglePinSession(session);
+                    } else if (which == 2) {
+                        confirmDeleteSession(session);
+                    }
+                })
+                .show();
     }
 
     private void showSessionOptionsDialog(Session session) {

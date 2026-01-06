@@ -18,4 +18,7 @@
     <color name="directionButton">#2ECC71</color>
     <color name="directionButtonText">#FFFFFF</color>
     <color name="buttonRipple">#332ECC71</color>
+    <!-- Popup menu user -->
+    <color name="userMenuBackground">#FFFFFF</color>
+    <color name="userMenuText">#181A20</color>
 </resources>

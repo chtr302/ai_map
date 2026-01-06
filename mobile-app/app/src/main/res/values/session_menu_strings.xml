@@ -1,0 +1,8 @@
+<resources>
+    <!-- Menu cho chỉnh sửa session -->
+    <string name="session_menu_rename">Đổi tên</string>
+    <string name="session_menu_pin">Ghim</string>
+    <string name="session_menu_unpin">Bỏ ghim</string>
+    <string name="session_menu_delete">Xóa</string>
+</resources>
+
